@@ -1,0 +1,65 @@
+# Python & Virtual Environments
+venv/
+backend/venv/
+env/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database & Storage
+*.db
+*.sqlite
+*.sqlite3
+geosense_local.db
+backend/geosense_local.db
+
+# Environment variables & secrets
+.env
+backend/.env
+*.local
+.env.*.local
+
+# Node & dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Large binary models
+*.litertlm
+*.tflite
+*.bin
+*.onnx
+
+# Logs
+logs/
+*.log

@@ -1,0 +1,340 @@
+/* ============================================================================
+   GEOSENSE SMART AGRICULTURE MODAL & HUB STYLES
+   Adheres strictly to existing design system:
+   --ink: #0b1d3a, --accent: #5b7cf0, --dot: #2fe0d0, --panel: #0e1f3d
+   ============================================================================ */
+
+.geosense-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(11, 29, 58, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.22, 0.7, 0.2, 1);
+}
+
+.geosense-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.geosense-modal {
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(11, 29, 58, 0.25), 0 0 0 1px rgba(11, 29, 58, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'Inter Tight', system-ui, -apple-system, sans-serif;
+  color: var(--ink, #0b1d3a);
+  transform: translateY(20px) scale(0.98);
+  transition: transform 0.35s cubic-bezier(0.22, 0.7, 0.2, 1);
+}
+
+.geosense-overlay.active .geosense-modal {
+  transform: translateY(0) scale(1);
+}
+
+/* Modal Header */
+.geosense-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(11, 29, 58, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+}
+
+.geosense-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink, #0b1d3a);
+}
+
+.geosense-modal-title .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: rgba(91, 124, 240, 0.1);
+  color: var(--accent, #5b7cf0);
+  border-radius: 20px;
+}
+
+.geosense-modal-title .badge .dot-ind {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot, #2fe0d0);
+}
+
+.geosense-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.geosense-close-btn:hover {
+  background: #f1f5f9;
+  color: var(--ink, #0b1d3a);
+}
+
+/* Tab Bar */
+.geosense-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 24px 0;
+  background: #f8fafc;
+  border-bottom: 1px solid rgba(11, 29, 58, 0.08);
+  overflow-x: auto;
+}
+
+.geosense-tab-btn {
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.geosense-tab-btn:hover {
+  color: var(--ink, #0b1d3a);
+}
+
+.geosense-tab-btn.active {
+  color: var(--accent, #5b7cf0);
+  font-weight: 600;
+  border-bottom-color: var(--accent, #5b7cf0);
+}
+
+/* Modal Content Area */
+.geosense-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.geosense-tab-pane {
+  display: none;
+}
+
+.geosense-tab-pane.active {
+  display: block;
+}
+
+/* Form Controls */
+.geosense-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.geosense-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.geosense-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink, #0b1d3a);
+}
+
+.geosense-field input,
+.geosense-field select,
+.geosense-field textarea {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ink, #0b1d3a);
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.geosense-field input:focus,
+.geosense-field select:focus,
+.geosense-field textarea:focus {
+  border-color: var(--accent, #5b7cf0);
+  box-shadow: 0 0 0 3px rgba(91, 124, 240, 0.15);
+}
+
+/* Action Buttons */
+.geosense-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: var(--ink, #0b1d3a);
+  color: #ffffff;
+  border: none;
+  border-radius: 30px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.geosense-btn-primary:hover {
+  background: #172d54;
+  transform: translateY(-1px);
+}
+
+.geosense-btn-primary .btn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot, #2fe0d0);
+}
+
+.geosense-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #f1f5f9;
+  color: var(--ink, #0b1d3a);
+  border: 1px solid #e2e8f0;
+  border-radius: 30px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.geosense-btn-secondary:hover {
+  background: #e2e8f0;
+}
+
+/* Camera & Upload Area */
+.soil-capture-container {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  background: #f8fafc;
+  margin-bottom: 20px;
+  position: relative;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.soil-video-preview,
+.soil-image-preview {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: none;
+}
+
+.soil-capture-controls {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Results Card */
+.geosense-result-card {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(11, 29, 58, 0.08);
+  background: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.geosense-disclaimer-box {
+  margin: 16px 0;
+  padding: 14px 18px;
+  background: #eff6ff;
+  border-left: 4px solid var(--accent, #5b7cf0);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #1e3a8a;
+}
+
+.weather-forecast-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.weather-day-card {
+  padding: 12px 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+}
+
+.market-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 0.9rem;
+}
+
+.market-table th,
+.market-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.market-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.community-post-card {
+  padding: 18px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 14px;
+  background: #ffffff;
+}
+

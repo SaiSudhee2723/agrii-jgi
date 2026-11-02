@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register Farmer Account — Geosense Smart Agriculture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #0b1d3a;
+      --accent: #5b7cf0;
+      --dot: #2fe0d0;
+      --ease: cubic-bezier(.22, .7, .2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #f8fafc;
+      font-family: 'Inter Tight', system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 700px;
+      height: 450px;
+      background: radial-gradient(circle, rgba(91, 124, 240, 0.15) 0%, rgba(47, 224, 208, 0.08) 50%, transparent 70%);
+      filter: blur(60px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .auth-container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 480px;
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid rgba(11, 29, 58, 0.08);
+      box-shadow: 0 20px 45px -10px rgba(11, 29, 58, 0.1), 0 0 0 1px rgba(11, 29, 58, 0.04);
+      padding: 36px 32px;
+    }
+
+    .brand-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .brand-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: -0.02em;
+    }
+
+    .back-home {
+      font-size: 0.85rem;
+      color: #64748b;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .back-home:hover {
+      color: var(--accent);
+    }
+
+    h1 {
+      font-size: 1.55rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: var(--ink);
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      font-family: inherit;
+      font-size: 0.92rem;
+      color: var(--ink);
+      outline: none;
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .field input:focus, .field select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(91, 124, 240, 0.15);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 13px;
+      background: var(--ink);
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .btn-submit:hover {
+      background: #172d54;
+      transform: translateY(-1px);
+    }
+
+    .btn-submit .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--dot);
+    }
+
+    .alert {
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .alert-error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+    }
+
+    .auth-footer {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 0.88rem;
+      color: #64748b;
+    }
+
+    .auth-footer a {
+      color: var(--accent);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .auth-footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="auth-container">
+    <div class="brand-header">
+      <a href="/" class="brand-link">
+        <svg viewBox="0 0 22 22" width="24" height="24">
+          <circle cx="11" cy="11" r="11" fill="#5b7cf0"/>
+          <path d="M7 14c0-3.5 3-6.5 6.5-6.5 0 3.5-3 6.5-6.5 6.5z" fill="#fff"/>
+          <path d="M10.5 14c0-2.2 2-4 4-4" stroke="#2fe0d0" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+        </svg>
+        <span class="brand-name">Geosense</span>
+      </a>
+      <a href="/" class="back-home">← Back to home</a>
+    </div>
+
+    <h1>Farmer Registration</h1>
+    <p class="subtitle">Set up your intelligent agriculture account in seconds.</p>
+
+    <div id="error-alert" class="alert alert-error"></div>
+
+    <form id="register-form">
+      <div class="field">
+        <label for="full_name">Full Name</label>
+        <input type="text" id="full_name" name="full_name" required placeholder="e.g. Sardar Harpreet Singh" />
+      </div>
+
+      <div class="field">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" required placeholder="farmer@example.com" />
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" minlength="6" required placeholder="••••••••" />
+        </div>
+        <div class="field">
+          <label for="region">Farm Region / State</label>
+          <input type="text" id="region" name="region" placeholder="e.g. Punjab, Gujarat" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="phone">Mobile Number (Optional)</label>
+        <input type="tel" id="phone" name="phone" placeholder="+91 98765 43210" />
+      </div>
+
+      <button type="submit" id="submit-btn" class="btn-submit">
+        <span class="dot"></span> Create Account & Enter Dashboard
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      Already have an account? <a href="/login">Sign In</a>
+    </div>
+  </div>
+
+  <script src="js/api-client.js"></script>
+  <script>
+    if (window.GeosenseApi && window.GeosenseApi.getToken()) {
+      window.location.replace('/dashboard');
+    }
+
+    const form = document.getElementById('register-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorAlert = document.getElementById('error-alert');
+
+    function showError(msg) {
+      errorAlert.textContent = msg;
+      errorAlert.style.display = 'block';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorAlert.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="dot"></span> Creating Account...';
+
+      const full_name = document.getElementById('full_name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const region = document.getElementById('region').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+
+      try {
+        await window.GeosenseApi.registerUser({ full_name, email, password, region, phone });
+
+        // Auto-login after registration
+        try {
+          await window.GeosenseApi.loginUser(email, password);
+        } catch (_) {
+          window.GeosenseApi.setSession('registered-user-token', {
+            full_name,
+            email,
+            region,
+            role: 'farmer'
+          });
+        }
+
+        window.location.replace('/dashboard');
+      } catch (err) {
+        showError(err.message || 'Registration failed. Please check your information.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span class="dot"></span> Create Account & Enter Dashboard';
+      }
+    });
+  </script>
+</body>
+</html>
+
