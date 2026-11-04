@@ -646,10 +646,45 @@
 
   async function loadWeatherModuleData() {
     const container = document.getElementById('dash-weather-container');
-    container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748b;">Querying Open-Meteo live API...</div>';
+    container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748b;">Querying weather telemetry...</div>';
 
     try {
-      const data = await window.GeosenseApi.getWeather();
+      const regionCoords = {
+        'punjab': { lat: 30.9010, lon: 75.8573, name: 'Ludhiana, Punjab' },
+        'haryana': { lat: 29.0588, lon: 76.0856, name: 'Hisar, Haryana' },
+        'uttar pradesh': { lat: 26.8467, lon: 80.9462, name: 'Lucknow, Uttar Pradesh' },
+        'maharashtra': { lat: 19.7515, lon: 75.7139, name: 'Aurangabad, Maharashtra' },
+        'karnataka': { lat: 15.3173, lon: 75.7139, name: 'Hubli, Karnataka' },
+        'gujarat': { lat: 22.2587, lon: 71.1924, name: 'Rajkot, Gujarat' },
+        'madhya pradesh': { lat: 22.9734, lon: 78.6569, name: 'Bhopal, Madhya Pradesh' },
+        'rajasthan': { lat: 26.9124, lon: 75.7873, name: 'Jaipur, Rajasthan' },
+        'tamil nadu': { lat: 11.1271, lon: 78.6569, name: 'Coimbatore, Tamil Nadu' },
+        'andhra pradesh': { lat: 15.9129, lon: 79.7400, name: 'Guntur, Andhra Pradesh' },
+        'telangana': { lat: 17.3850, lon: 78.4867, name: 'Hyderabad, Telangana' }
+      };
+
+      const user = window.GeosenseApi ? window.GeosenseApi.getUser() : null;
+      const userRegKey = (user && user.region ? user.region.toLowerCase().trim() : 'punjab');
+      let target = regionCoords[userRegKey] || { lat: 30.9010, lon: 75.8573, name: 'Punjab, India' };
+
+      if (navigator.geolocation && !window._geoDenied) {
+        try {
+          const pos = await new Promise((res, rej) => {
+            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, maximumAge: 300000 });
+          });
+          if (pos && pos.coords) {
+            target = {
+              lat: parseFloat(pos.coords.latitude.toFixed(4)),
+              lon: parseFloat(pos.coords.longitude.toFixed(4)),
+              name: 'My Farm Location'
+            };
+          }
+        } catch (_) {
+          window._geoDenied = true;
+        }
+      }
+
+      const data = await window.GeosenseApi.getWeather(target.lat, target.lon, target.name);
       container.innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
           <div style="padding: 20px 24px; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0;">

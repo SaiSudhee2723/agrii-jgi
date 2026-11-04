@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+from collections import defaultdict
 import httpx
 from app.schemas.weather import WeatherResponse, CurrentWeather, ForecastDay, FarmingAlert
 from app.core.config import settings
@@ -8,8 +9,11 @@ from app.core.config import settings
 logger = logging.getLogger("geosense.weather")
 
 class WeatherService:
-    """Module 4: Weather intelligence service with live Open-Meteo API integration and agro-advisory alerts."""
+    """Module 4: Weather intelligence service with live OpenWeatherMap API and Open-Meteo agro-meteorology fallback."""
 
+    OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
+    OPENWEATHER_FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
+    OPENWEATHER_GEO_URL = "https://api.openweathermap.org/geo/1.0/reverse"
     OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
     @classmethod
@@ -19,26 +23,183 @@ class WeatherService:
         longitude: float = 78.9629,
         location_name: str = "Regional Farm"
     ) -> WeatherResponse:
-        try:
-            params = {
-                "latitude": latitude,
-                "longitude": longitude,
-                "current": "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m",
-                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
-                "timezone": "auto"
-            }
+        # 1. Try OpenWeatherMap first if API key configured
+        api_key = getattr(settings, "OPENWEATHER_API_KEY", "").strip()
+        if api_key:
+            try:
+                ow_resp = await cls._fetch_openweathermap(latitude, longitude, location_name, api_key)
+                if ow_resp:
+                    return ow_resp
+            except Exception as e:
+                logger.warning(f"OpenWeatherMap request failed: {e}. Falling back to Open-Meteo.")
 
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                res = await client.get(cls.OPEN_METEO_URL, params=params)
-                if res.status_code == 200:
-                    data = res.json()
-                    return cls._parse_open_meteo_response(data, latitude, longitude, location_name)
-                else:
-                    logger.warning(f"Open-Meteo returned status {res.status_code}.")
-                    raise ValueError(f"Weather provider returned HTTP {res.status_code}")
+        # 2. Try Open-Meteo high-resolution agro-meteorology
+        try:
+            return await cls._fetch_open_meteo(latitude, longitude, location_name)
         except Exception as e:
-            logger.error(f"Weather API request error: {e}")
-            raise ValueError(f"Live weather data temporarily unavailable from Open-Meteo: {str(e)}")
+            logger.error(f"Open-Meteo request failed: {e}. Using offline baseline.")
+            return cls._get_fallback_weather(latitude, longitude, location_name)
+
+    @classmethod
+    async def _fetch_openweathermap(
+        cls,
+        lat: float,
+        lng: float,
+        location_name: str,
+        api_key: str
+    ) -> Optional[WeatherResponse]:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            # 1. Current Weather
+            curr_res = await client.get(
+                cls.OPENWEATHER_CURRENT_URL,
+                params={"lat": lat, "lon": lng, "appid": api_key, "units": "metric"}
+            )
+            if curr_res.status_code != 200:
+                logger.info(f"OpenWeather current returned status {curr_res.status_code}: {curr_res.text}")
+                return None
+
+            curr_data = curr_res.json()
+
+            # 2. 5-day / 3-hour Forecast
+            fore_res = await client.get(
+                cls.OPENWEATHER_FORECAST_URL,
+                params={"lat": lat, "lon": lng, "appid": api_key, "units": "metric"}
+            )
+            fore_data = fore_res.json() if fore_res.status_code == 200 else {}
+
+            # 3. Reverse Geocode for accurate village / city name
+            resolved_location = location_name
+            try:
+                geo_res = await client.get(
+                    cls.OPENWEATHER_GEO_URL,
+                    params={"lat": lat, "lon": lng, "limit": 1, "appid": api_key}
+                )
+                if geo_res.status_code == 200 and len(geo_res.json()) > 0:
+                    g = geo_res.json()[0]
+                    resolved_location = f"{g.get('name', '')}, {g.get('state', g.get('country', ''))}".strip(', ')
+                elif curr_data.get("name"):
+                    resolved_location = f"{curr_data.get('name')}, {curr_data.get('sys', {}).get('country', '')}".strip(', ')
+            except Exception:
+                pass
+
+            return cls._parse_openweathermap_response(curr_data, fore_data, lat, lng, resolved_location)
+
+    @classmethod
+    def _parse_openweathermap_response(
+        cls,
+        curr_data: Dict[str, Any],
+        fore_data: Dict[str, Any],
+        lat: float,
+        lng: float,
+        location_name: str
+    ) -> WeatherResponse:
+        main = curr_data.get("main", {})
+        wind = curr_data.get("wind", {})
+        weather_list = curr_data.get("weather", [{}])
+        weather_first = weather_list[0] if weather_list else {}
+
+        temp = float(main.get("temp", 28.0))
+        rh = float(main.get("humidity", 60.0))
+        wind_speed_kmh = round(float(wind.get("speed", 3.0)) * 3.6, 1) # m/s to km/h
+        wind_deg = float(wind.get("deg", 180.0))
+
+        # Rain precipitation in past 1h / 3h
+        rain_obj = curr_data.get("rain", {})
+        precip = float(rain_obj.get("1h", rain_obj.get("3h", 0.0)))
+
+        condition_desc = weather_first.get("description", "Clear").capitalize()
+        icon = weather_first.get("icon", "01d")
+
+        current = CurrentWeather(
+            temperature=temp,
+            humidity=rh,
+            wind_speed=wind_speed_kmh,
+            wind_direction=wind_deg,
+            weather_condition=condition_desc,
+            weather_icon=icon,
+            precipitation_mm=precip,
+            uv_index=6.5
+        )
+
+        # Parse 5-day / 3-hour forecast grouped by date
+        forecast_list: List[ForecastDay] = []
+        if "list" in fore_data:
+            days_map = defaultdict(lambda: {"temps": [], "precip": 0.0, "pop": 0.0, "conditions": []})
+            for item in fore_data["list"]:
+                dt_txt = item.get("dt_txt", "")
+                date_key = dt_txt.split(" ")[0] if " " in dt_txt else dt_txt
+                if not date_key:
+                    continue
+                item_main = item.get("main", {})
+                days_map[date_key]["temps"].append(item_main.get("temp", temp))
+                item_rain = item.get("rain", {})
+                days_map[date_key]["precip"] += float(item_rain.get("3h", 0.0))
+                days_map[date_key]["pop"] = max(days_map[date_key]["pop"], float(item.get("pop", 0.0)))
+                item_w = item.get("weather", [{}])
+                if item_w:
+                    days_map[date_key]["conditions"].append(item_w[0].get("description", "Clear").capitalize())
+
+            for date_key, f_val in sorted(days_map.items())[:7]:
+                t_list = f_val["temps"] or [temp]
+                cond_list = f_val["conditions"] or [condition_desc]
+                forecast_list.append(ForecastDay(
+                    date=date_key,
+                    temp_max=round(max(t_list), 1),
+                    temp_min=round(min(t_list), 1),
+                    precipitation_sum=round(f_val["precip"], 1),
+                    precipitation_probability=round(f_val["pop"] * 100),
+                    condition=cond_list[len(cond_list) // 2]
+                ))
+
+        if not forecast_list:
+            # Fallback 1 day
+            forecast_list.append(ForecastDay(
+                date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                temp_max=temp,
+                temp_min=temp - 6.0,
+                precipitation_sum=precip,
+                precipitation_probability=10,
+                condition=condition_desc
+            ))
+
+        alerts = cls._generate_agro_alerts(temp, rh, precip, forecast_list)
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        return WeatherResponse(
+            latitude=lat,
+            longitude=lng,
+            location_name=location_name,
+            current=current,
+            forecast=forecast_list,
+            alerts=alerts,
+            source="OpenWeatherMap High-Precision Telemetry",
+            last_updated=now_str,
+            is_available=True
+        )
+
+    @classmethod
+    async def _fetch_open_meteo(
+        cls,
+        latitude: float,
+        longitude: float,
+        location_name: str
+    ) -> WeatherResponse:
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": "temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m",
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
+            "timezone": "auto"
+        }
+
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            res = await client.get(cls.OPEN_METEO_URL, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                return cls._parse_open_meteo_response(data, latitude, longitude, location_name)
+            else:
+                logger.warning(f"Open-Meteo returned status {res.status_code}.")
+                raise ValueError(f"Weather provider returned HTTP {res.status_code}")
 
     @classmethod
     def _parse_open_meteo_response(
@@ -89,7 +250,7 @@ class WeatherService:
             ))
 
         alerts = cls._generate_agro_alerts(temp, rh, precip, forecast_list)
-        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         return WeatherResponse(
             latitude=lat,
@@ -209,4 +370,3 @@ class WeatherService:
             alerts=alerts,
             source="Agro-Meteorology Baseline Model (Offline Resilience)"
         )
-
