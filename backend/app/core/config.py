@@ -3,6 +3,9 @@ from typing import List
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Geosense Smart Agriculture API"
     API_V1_STR: str = "/api/v1"
@@ -28,9 +31,8 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     class Config:
-        env_file = ".env"
+        env_file = [ENV_PATH, ".env", "backend/.env"]
         case_sensitive = True
         extra = "allow"
 
 settings = Settings()
-

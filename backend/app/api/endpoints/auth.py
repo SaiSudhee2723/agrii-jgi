@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("/config", summary="Retrieve public auth configuration")
 async def get_auth_config():
     """Returns safe public Supabase configuration for client-side OAuth."""
-    is_live = bool(settings.SUPABASE_URL and "placeholder" not in settings.SUPABASE_URL and "acnuywrigqjzjkqnohl" not in settings.SUPABASE_URL)
+    is_live = bool(settings.SUPABASE_URL and "placeholder" not in settings.SUPABASE_URL and "your-project" not in settings.SUPABASE_URL)
     return {
         "supabase_url": settings.SUPABASE_URL,
         "supabase_anon_key": settings.SUPABASE_ANON_KEY,
