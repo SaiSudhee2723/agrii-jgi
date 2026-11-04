@@ -77,10 +77,14 @@
     const mapContainer = document.getElementById('farm-map-canvas');
     if (!mapContainer || map) return;
 
-    // 1. Satellite Layer (DEFAULT: Esri World Imagery)
-    satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    // 1. High-Resolution Satellite Layer (DEFAULT: Google Hybrid Satellite)
+    // Provides crystal-clear rural agricultural satellite imagery down to zoom 20 with field/road labels
+    // and eliminates "Map data not yet available" placeholders.
+    satelliteLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+      subdomains: ['0', '1', '2', '3'],
+      maxZoom: 20,
+      maxNativeZoom: 20,
+      attribution: '&copy; Google Hybrid Satellite GIS'
     });
 
     // 2. Street Layer (OpenStreetMap)
@@ -92,7 +96,8 @@
     // Initialize Map with Satellite Layer as default
     map = L.map('farm-map-canvas', {
       center: [currentCoordinates.lat, currentCoordinates.lng],
-      zoom: 14,
+      zoom: 15,
+      maxZoom: 20,
       layers: [satelliteLayer], // SATELLITE AS DEFAULT
       zoomControl: true,
       scrollWheelZoom: true
