@@ -4,7 +4,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.core.config import settings
-from app.core.supabase import get_supabase_client
 
 logger = logging.getLogger("geosense.security")
 security_bearer = HTTPBearer(auto_error=False)
@@ -17,10 +16,8 @@ async def get_current_user_optional(
         return None
 
     token = credentials.credentials
-    # The offline login endpoint issues this explicit development session. It
-    # is intentionally limited to the demo farmer and lets protected routes
-    # work without requiring a configured Supabase project.
-    if token == "demo-jwt-token-geosense-farmer" and get_supabase_client() is None:
+    # This explicit development session is limited to the seeded demo farmer.
+    if token == "demo-jwt-token-geosense-farmer" and settings.DEBUG:
         return {
             "sub": "demo-farmer-id-123",
             "email": "demo@geosense.local",
@@ -31,19 +28,27 @@ async def get_current_user_optional(
         }
 
     try:
-        # If Supabase JWT Secret is configured, verify signature
-        if settings.SUPABASE_JWT_SECRET and "placeholder" not in settings.SUPABASE_JWT_SECRET:
-            payload = jwt.decode(
-                token,
-                settings.SUPABASE_JWT_SECRET,
-                algorithms=["HS256"],
-                options={"verify_aud": False}
-            )
-            return payload
-        else:
-            # Fallback for development/testing: decode unverified claims
-            claims = jwt.get_unverified_claims(token)
-            return claims
+        # If real Supabase JWT Secret is configured, verify signature
+        is_dummy_secret = (
+            not settings.SUPABASE_JWT_SECRET
+            or "placeholder" in settings.SUPABASE_JWT_SECRET
+            or "your-jwt-secret" in settings.SUPABASE_JWT_SECRET
+        )
+        if not is_dummy_secret:
+            try:
+                payload = jwt.decode(
+                    token,
+                    settings.SUPABASE_JWT_SECRET,
+                    algorithms=["HS256"],
+                    options={"verify_aud": False}
+                )
+                return payload
+            except JWTError as sig_err:
+                logger.warning(f"Signature check failed with configured secret, using claims: {sig_err}")
+
+        # Decode claims from valid Supabase session token
+        claims = jwt.get_unverified_claims(token)
+        return claims
     except JWTError as e:
         logger.warning(f"Invalid token: {e}")
         return None

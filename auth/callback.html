@@ -190,14 +190,22 @@
         let session = null;
 
         if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          session = data.session;
-        } else {
+          try {
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+            if (!error && data && data.session) {
+              session = data.session;
+            }
+          } catch (codeErr) {
+            console.warn('Manual exchange notice (SDK may have already exchanged code):', codeErr);
+          }
+        }
+
+        if (!session) {
           // Check for existing/stored session or hash tokens
           const { data, error } = await supabase.auth.getSession();
-          if (error) throw error;
-          session = data.session;
+          if (!error && data && data.session) {
+            session = data.session;
+          }
         }
 
         // If no session found in query or storage, wait for onAuthStateChange
