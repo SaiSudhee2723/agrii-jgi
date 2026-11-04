@@ -28,3 +28,4 @@ class FarmResponse(BaseModel):
     crop_type: Optional[str] = "General Crop"
     created_at: str
     updated_at: str
+

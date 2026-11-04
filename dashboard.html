@@ -1,860 +1,872 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard — Geosense Smart Agriculture</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/dashboard.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-  <script>
-    // Immediate auth gate before rendering
-    if (!localStorage.getItem('geosense_auth_token')) {
-      window.location.replace('/login');
-    }
-  </script>
-</head>
-<body>
-
-  <!-- LEFT SIDEBAR -->
-  <aside class="dashboard-sidebar">
-    <div class="sidebar-header">
-      <a href="/" class="brand-badge">
-        <svg viewBox="0 0 22 22" width="26" height="26">
-          <circle cx="11" cy="11" r="11" fill="#5b7cf0"/>
-          <path d="M7 14c0-3.5 3-6.5 6.5-6.5 0 3.5-3 6.5-6.5 6.5z" fill="#fff"/>
-          <path d="M10.5 14c0-2.2 2-4 4-4" stroke="#2fe0d0" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-        </svg>
-        <span class="brand-title">Geosense</span>
-      </a>
-    </div>
-
-    <nav class="sidebar-nav">
-      <button class="nav-item active" data-target="overview">
-        <span class="icon">📊</span>
-        <span>Overview</span>
-      </button>
-      <button class="nav-item" data-target="soil">
-        <span class="icon">🧪</span>
-        <span>Soil NPK Analysis</span>
-      </button>
-      <button class="nav-item" data-target="crop">
-        <span class="icon">🌾</span>
-        <span>Crop Recommendation</span>
-      </button>
-      <button class="nav-item" data-target="irrigation">
-        <span class="icon">💧</span>
-        <span>Smart Irrigation</span>
-      </button>
-      <button class="nav-item" data-target="weather">
-        <span class="icon">⛅</span>
-        <span>Weather Intelligence</span>
-      </button>
-      <button class="nav-item" data-target="market">
-        <span class="icon">📈</span>
-        <span>Mandi Market</span>
-      </button>
-      <button class="nav-item" data-target="community">
-        <span class="icon">👥</span>
-        <span>Farmer Community</span>
-      </button>
-      <button class="nav-item" data-target="assistant">
-        <span class="icon">🤖</span>
-        <span>AI Agro Assistant</span>
-      </button>
-      <button class="nav-item" data-target="profile">
-        <span class="icon">👤</span>
-        <span>Farmer Profile</span>
-      </button>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="user-snippet">
-        <div class="user-info">
-          <div class="user-avatar user-avatar-initial">F</div>
-          <div class="user-details">
-            <div class="user-name user-name-display">Farmer Member</div>
-            <div class="user-role user-region-display">Farm: Punjab</div>
-          </div>
-        </div>
-        <button id="dash-btn-signout" class="btn-signout" title="Sign Out">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-        </button>
-      </div>
-    </div>
-  </aside>
-
-  <!-- MAIN DASHBOARD CONTENT -->
-  <main class="dashboard-main">
-    <header class="dashboard-header">
-      <h1 class="page-title" id="dashboard-page-title">Farm Overview</h1>
-      <div class="header-actions">
-        <div class="farm-tag">
-          <span class="live-indicator"></span>
-          <span>FastAPI Live: 127.0.0.1:8001</span>
-        </div>
-        <a href="/" class="btn-geo-secondary" style="font-size: 0.85rem; padding: 6px 14px;">
-          🌐 Public Site
-        </a>
-      </div>
-    </header>
-
-    <div class="dashboard-content">
-
-      <!-- PANE 1: OVERVIEW -->
-      <section class="module-pane active" id="pane-overview">
-        <div class="stats-grid">
-          <!-- Real Metric 1: Soil Tests -->
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-label">Soil Tests Recorded</span>
-              <div class="stat-icon">🌱</div>
-            </div>
-            <div class="stat-value" id="ov-soil-count">0</div>
-            <div class="stat-detail" id="ov-soil-detail">No tests submitted yet</div>
-            <div style="margin-top: 8px;">
-              <span class="data-source-badge">Database Verified</span>
-            </div>
-          </div>
-
-          <!-- Real Metric 2: Saved Crop Recommendation -->
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-label">Crop Model Status</span>
-              <div class="stat-icon">🌾</div>
-            </div>
-            <div class="stat-value" id="ov-crop-val" style="font-size: 1.4rem;">None</div>
-            <div class="stat-detail" id="ov-crop-detail">Run ML model to compute</div>
-            <div style="margin-top: 8px;">
-              <span class="data-source-badge calc">Scikit-Learn Model</span>
-            </div>
-          </div>
-
-          <!-- Real Metric 3: Latest Irrigation Demand -->
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-label">Irrigation Requirement</span>
-              <div class="stat-icon">💧</div>
-            </div>
-            <div class="stat-value" id="ov-irrig-val" style="font-size: 1.4rem;">None</div>
-            <div class="stat-detail" id="ov-irrig-detail">No calculation performed yet</div>
-            <div style="margin-top: 8px;">
-              <span class="data-source-badge calc">FAO-56 Standard</span>
-            </div>
-          </div>
-
-          <!-- Real Metric 4: Ambient Weather Telemetry -->
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-label">Ambient Weather</span>
-              <div class="stat-icon">⛅</div>
-            </div>
-            <div class="stat-value" id="ov-weather-val">--°C</div>
-            <div class="stat-detail" id="ov-weather-detail">Connecting to Open-Meteo...</div>
-            <div style="margin-top: 8px;">
-              <span class="data-source-badge live" id="ov-weather-source">Live Open-Meteo</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="dashboard-row">
-          <div class="dash-panel">
-            <div class="panel-header">
-              <h3 class="panel-title">Quick Agricultural Shortcuts</h3>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
-              <button onclick="document.querySelector('[data-target=\'soil\']').click()" class="stat-card" style="cursor: pointer; text-align: left; background: #fafbfc; border-color: #cbd5e1;">
-                <div style="font-size: 1.5rem; margin-bottom: 8px;">📷</div>
-                <strong style="color: #0b1d3a;">Record Soil Test</strong>
-                <small style="color: #64748b; margin-top: 4px;">Enter lab NPK or physical scan</small>
-              </button>
-              <button onclick="document.querySelector('[data-target=\'crop\']').click()" class="stat-card" style="cursor: pointer; text-align: left; background: #fafbfc; border-color: #cbd5e1;">
-                <div style="font-size: 1.5rem; margin-bottom: 8px;">🌾</div>
-                <strong style="color: #0b1d3a;">Run Crop Model</strong>
-                <small style="color: #64748b; margin-top: 4px;">Predict suitability from soil NPK</small>
-              </button>
-              <button onclick="document.querySelector('[data-target=\'irrigation\']').click()" class="stat-card" style="cursor: pointer; text-align: left; background: #fafbfc; border-color: #cbd5e1;">
-                <div style="font-size: 1.5rem; margin-bottom: 8px;">💧</div>
-                <strong style="color: #0b1d3a;">Water Calculator</strong>
-                <small style="color: #64748b; margin-top: 4px;">Calculate exact liter deficit</small>
-              </button>
-            </div>
-          </div>
-
-          <div class="dash-panel">
-            <div class="panel-header">
-              <h3 class="panel-title">Recent Field Activities</h3>
-              <span class="data-source-badge">Real Activity Log</span>
-            </div>
-            <div id="ov-activities-container">
-              <div class="empty-state-card" style="padding: 24px;">
-                No recent field activities recorded. Your actions will appear here as you log soil tests, run crop models, or calculate irrigation.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 2: SOIL NPK ANALYSIS -->
-      <section class="module-pane" id="pane-soil">
-        <!-- Sub-Module 1: Physical Camera Diagnostic -->
-        <div class="dash-panel" style="margin-bottom: 24px;">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">1. Camera Optical Soil Evaluation & Physical Diagnostics</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                OpenCV image pipeline verifying surface focus, lighting exposure, and observable physical texture.
-              </p>
-            </div>
-            <span class="data-source-badge">Computer Vision</span>
-          </div>
-
-          <div class="camera-box">
-            <video id="dash-soil-video" autoplay playsinline muted></video>
-            <img id="dash-soil-preview" alt="Soil preview" />
-
-            <div id="dash-soil-placeholder">
-              <div style="font-size: 3rem; margin-bottom: 10px;">📸</div>
-              <strong style="color: #0b1d3a; font-size: 1.1rem;">Ready to Evaluate Soil Photo</strong>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">Capture using mobile camera or upload from your gallery</p>
-            </div>
-
-            <input type="file" id="dash-soil-file" accept="image/jpeg,image/png,image/webp" style="display: none;" />
-          </div>
-
-          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <button type="button" class="btn-geo-secondary" id="dash-btn-camera">📷 Open Device Camera</button>
-            <button type="button" class="btn-geo-secondary" id="dash-btn-snap" style="display: none;">⚡ Capture Frame</button>
-            <button type="button" class="btn-geo-secondary" id="dash-btn-upload">📁 Choose from Gallery</button>
-            <button type="button" class="btn-geo-secondary" id="dash-btn-reset" style="display: none;">🔄 Reset</button>
-            <button type="button" class="btn-geo-primary" id="dash-btn-analyze" disabled>Run AI Quality Check</button>
-          </div>
-
-          <div id="dash-soil-result"></div>
-        </div>
-
-        <!-- Sub-Module 2: Real Lab / Physical Sensor Ingestion -->
-        <div class="dash-panel" style="margin-bottom: 24px;">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">2. Enter Verified Soil Test Measurements (Lab or Sensor)</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                Record actual quantitative values from certified soil testing laboratories, sensor kits, or manual test strips.
-              </p>
-            </div>
-            <span class="data-source-badge lab">Certified Assays</span>
-          </div>
-
-          <form id="dash-manual-soil-form">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;">
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Nitrogen (N) [kg/ha]</label>
-                <input type="number" id="inp-soil-n" value="75" min="0" max="500" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Phosphorus (P) [kg/ha]</label>
-                <input type="number" id="inp-soil-p" value="38" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Potassium (K) [kg/ha]</label>
-                <input type="number" id="inp-soil-k" value="65" min="0" max="500" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Soil pH (0.0 - 14.0)</label>
-                <input type="number" id="inp-soil-ph" step="0.1" value="6.8" min="0" max="14" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Electrical Conductivity (EC) [dS/m]</label>
-                <input type="number" id="inp-soil-ec" step="0.01" value="0.85" min="0" max="20" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Soil Moisture (%)</label>
-                <input type="number" id="inp-soil-moisture" value="45" min="0" max="100" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Data Source / Equipment</label>
-                <select id="inp-soil-source-type" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;">
-                  <option value="laboratory_report">Certified Agricultural Laboratory Report</option>
-                  <option value="physical_sensor">Calibrated Physical Field Sensor Kit</option>
-                  <option value="manual_entry">Manual Chemical Test Kit</option>
-                </select>
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Testing Facility / Kit Name</label>
-                <input type="text" id="inp-soil-lab-name" value="IARI / KVK Soil Health Lab" placeholder="e.g. State Agricultural University Lab" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-            </div>
-
-            <button type="submit" class="btn-geo-primary" id="btn-save-soil-test">Save Verified Soil Test to Database</button>
-          </form>
-          <div id="dash-manual-soil-msg" style="margin-top: 14px;"></div>
-        </div>
-
-        <!-- Sub-Module 3: Soil Test History -->
-        <div class="dash-panel">
-          <div class="panel-header">
-            <h3 class="panel-title">Saved Soil Test History</h3>
-            <span class="data-source-badge">Database Records</span>
-          </div>
-          <div id="dash-soil-history-list">
-            <div class="empty-state-card">
-              <div class="empty-state-icon">🌱</div>
-              <strong>No soil tests yet.</strong><br>
-              Add your first soil report or camera scan above to get started.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 3: CROP RECOMMENDATION -->
-      <section class="module-pane" id="pane-crop">
-        <div class="dash-panel" style="margin-bottom: 24px;">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Machine Learning Crop Recommendation Model</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                Calibrated Scikit-Learn Random Forest model predicting optimum crop suitability from 7 agro-climatic parameters.
-              </p>
-            </div>
-            <span class="data-source-badge calc">Scikit-Learn Classifier</span>
-          </div>
-
-          <form id="dash-crop-form">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px;">
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Nitrogen (N) [kg/ha]</label>
-                <input type="number" name="n" value="80" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Phosphorus (P) [kg/ha]</label>
-                <input type="number" name="p" value="45" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Potassium (K) [kg/ha]</label>
-                <input type="number" name="k" value="40" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Soil pH (0 - 14)</label>
-                <input type="number" name="ph" step="0.1" value="6.5" min="0" max="14" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Temperature (°C)</label>
-                <input type="number" name="temp" step="0.1" value="26.0" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Relative Humidity (%)</label>
-                <input type="number" name="humidity" step="0.1" value="80" min="0" max="100" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Annual Rainfall (mm)</label>
-                <input type="number" name="rainfall" value="1200" min="0" max="2500" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-            </div>
-
-            <button type="submit" class="btn-geo-primary" id="btn-run-crop-model">Compute Crop Recommendation</button>
-          </form>
-
-          <div id="dash-crop-result"></div>
-        </div>
-
-        <!-- Saved Crop Recommendations History -->
-        <div class="dash-panel">
-          <div class="panel-header">
-            <h3 class="panel-title">Saved Crop Recommendations</h3>
-            <span class="data-source-badge">Database Records</span>
-          </div>
-          <div id="dash-crop-history-list">
-            <div class="empty-state-card">
-              <div class="empty-state-icon">🌾</div>
-              <strong>No crop recommendations saved yet.</strong><br>
-              Run your first recommendation above to see results here.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 4: SMART IRRIGATION -->
-      <section class="module-pane" id="pane-irrigation">
-        <div class="dash-panel" style="margin-bottom: 24px;">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Smart Irrigation Scheduling & Water Requirement</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                FAO-56 Penman-Monteith Evapotranspiration standard calculating volumetric water demand from soil moisture deficit.
-              </p>
-            </div>
-            <span class="data-source-badge calc">FAO-56 Methodology</span>
-          </div>
-
-          <form id="dash-irrigation-form">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px;">
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Crop</label>
-                <select name="crop" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;">
-                  <option value="Wheat">Wheat</option>
-                  <option value="Rice" selected>Rice</option>
-                  <option value="Maize">Maize</option>
-                  <option value="Cotton">Cotton</option>
-                  <option value="Tomato">Tomato</option>
-                  <option value="Sugarcane">Sugarcane</option>
-                </select>
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Growth Stage</label>
-                <select name="stage" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;">
-                  <option value="initial">Initial</option>
-                  <option value="vegetative" selected>Vegetative</option>
-                  <option value="flowering">Flowering</option>
-                  <option value="yield_formation">Yield Formation</option>
-                  <option value="ripening">Ripening</option>
-                </select>
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Current Soil Moisture (%)</label>
-                <input type="number" name="moisture" value="40" min="0" max="100" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Field Area (Acres)</label>
-                <input type="number" name="acres" value="2.5" step="0.1" min="0.1" max="1000" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-              <div>
-                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Forecast Rainfall (mm)</label>
-                <input type="number" name="rain" value="0" min="0" max="300" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
-              </div>
-            </div>
-
-            <button type="submit" class="btn-geo-primary">Calculate Water Requirement</button>
-          </form>
-
-          <div id="dash-irrigation-result"></div>
-        </div>
-
-        <!-- Irrigation Records History -->
-        <div class="dash-panel">
-          <div class="panel-header">
-            <h3 class="panel-title">Saved Irrigation History</h3>
-            <span class="data-source-badge">Database Records</span>
-          </div>
-          <div id="dash-irrigation-history-list">
-            <div class="empty-state-card">
-              <div class="empty-state-icon">💧</div>
-              <strong>No irrigation records yet.</strong><br>
-              Compute your first field requirement above to see records here.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 5: WEATHER INTELLIGENCE -->
-      <section class="module-pane" id="pane-weather">
-        <div class="dash-panel">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Live Agro-Meteorological Telemetry</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                High-precision real-time conditions, satellite agro-telemetry, and multi-day agricultural forecast.
-              </p>
-            </div>
-            <span class="data-source-badge live" id="badge-weather-source">OpenWeatherMap Live</span>
-          </div>
-
-          <!-- Location Selector & GPS Bar -->
-          <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: #f8fafc; padding: 12px 16px; border-radius: 10px; border: 1px solid #e2e8f0;">
-            <div style="position: relative; flex: 1; min-width: 220px;">
-              <input type="text" id="weather-search-input" placeholder="Search any city, district or village (e.g., Bengaluru, Mandya, Pune, Delhi)..." style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; outline: none; box-sizing: border-box;" />
-            </div>
-            <button id="btn-weather-search" class="btn-geo-primary" style="padding: 9px 16px; font-size: 0.88rem; border-radius: 8px;">Search Location</button>
-            <button id="btn-weather-gps" type="button" style="padding: 9px 14px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: #0b1d3a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-              <span>📍 Detect My Live GPS</span>
-            </button>
-          </div>
-
-          <div id="dash-weather-container">
-            <div style="padding: 24px; text-align: center; color: #64748b;">Loading live telemetry...</div>
-          </div>
-        </div>
-
-        <!-- FARM LOCATION INTELLIGENCE & SATELLITE ACREAGE MAP -->
-        <div class="dash-panel" id="farm-location-intelligence-panel" style="margin-top: 24px; position: relative;">
-          <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
-            <div>
-              <h3 class="panel-title" style="display: flex; align-items: center; gap: 8px;">
-                <span>🛰️ Farm Location Intelligence Map</span>
-                <span class="data-source-badge live">Live Satellite GIS</span>
-              </h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                Interactive high-resolution agricultural satellite GIS. Click to drop farm markers, draw field boundaries, calculate acreage, and link telemetry to live micro-climate weather.
-              </p>
-            </div>
-
-            <!-- Top Action Controls -->
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-              <button type="button" class="btn-geo-primary" id="btn-open-save-farm" style="padding: 8px 14px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
-                <span>💾 Save Farm Plot</span>
-              </button>
-              <button type="button" id="btn-toggle-saved-farms" style="padding: 8px 14px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; font-weight: 600; color: #0b1d3a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                <span>📂 Saved Farms (<span id="saved-farms-count">0</span>)</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Saved Farms Drawer (Collapsible) -->
-          <div id="saved-farms-drawer" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <h4 style="font-size: 0.92rem; font-weight: 700; color: #0b1d3a; margin: 0;">Your Saved Agricultural Plots</h4>
-              <button type="button" id="btn-close-saved-drawer" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b;">✕</button>
-            </div>
-            <div id="saved-farms-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
-              <div style="padding: 12px; color: #64748b; font-size: 0.85rem;">Loading saved plots...</div>
-            </div>
-          </div>
-
-          <!-- Map HUD & Quick Action Toolbar -->
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; background: #ffffff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-            <!-- Map Layers Pill Switcher -->
-            <div style="display: inline-flex; background: #f1f5f9; padding: 3px; border-radius: 8px; gap: 4px;">
-              <button type="button" id="btn-layer-satellite" class="map-layer-btn active" style="padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: #0b1d3a; color: #ffffff;">
-                🛰️ Satellite View (Default)
-              </button>
-              <button type="button" id="btn-layer-street" class="map-layer-btn" style="padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: transparent; color: #475569;">
-                🗺️ Street Map
-              </button>
-            </div>
-
-            <!-- Boundary Drawing Tool Buttons -->
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <button type="button" id="btn-draw-boundary" style="padding: 6px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #1d4ed8; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                <span>✏️ Draw Boundary</span>
-              </button>
-              <button type="button" id="btn-clear-boundary" style="padding: 6px 12px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #e11d48; cursor: pointer;">
-                <span>🗑️ Clear Boundary</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Leaflet Interactive Map Canvas -->
-          <div style="position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(11, 29, 58, 0.06);">
-            <div id="farm-map-canvas" style="width: 100%; height: 500px; z-index: 1;"></div>
-
-            <!-- Floating Geodesic Readout HUD (Top Right of Map) -->
-            <div id="map-telemetry-hud" style="position: absolute; top: 12px; right: 12px; z-index: 1000; background: rgba(11, 29, 58, 0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #ffffff; padding: 10px 14px; border-radius: 10px; font-size: 0.82rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); max-width: 290px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px;">
-                <strong style="color: #2fe0d0; display: flex; align-items: center; gap: 4px;">
-                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2fe0d0;"></span>
-                  Telemetry HUD
-                </strong>
-                <span id="hud-status" style="font-size: 0.72rem; color: #94a3b8;">Click map to pin</span>
-              </div>
-              <div style="line-height: 1.5;">
-                <div>📍 <strong>Coord:</strong> <span id="hud-coords">12.9753° N, 77.5910° E</span></div>
-                <div>🌾 <strong>Area:</strong> <span id="hud-area">0.00 Acres (0.00 Ha)</span></div>
-                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.15); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.76rem;">
-                  <div>🌡️ <span id="hud-temp">--°C</span></div>
-                  <div>💧 <span id="hud-humidity">--% RH</span></div>
-                  <div>🌧️ <span id="hud-rain">0 mm</span></div>
-                  <div>☀️ <span id="hud-et">-- mm ET₀</span></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Map Hint Bar (Bottom of Map) -->
-            <div style="position: absolute; bottom: 8px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.92); backdrop-filter: blur(4px); color: #0b1d3a; padding: 4px 10px; border-radius: 6px; font-size: 0.74rem; font-weight: 500; border: 1px solid #cbd5e1;">
-              💡 <em>Click anywhere to drop marker • Drag marker to adjust • Click "Draw Boundary" to trace field</em>
-            </div>
-          </div>
-
-          <!-- Save / Edit Farm Modal Dialog -->
-          <div id="farm-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 29, 58, 0.6); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
-            <div style="background: #ffffff; border-radius: 16px; width: 100%; max-width: 480px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); border: 1px solid #cbd5e1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 id="farm-modal-title" style="margin: 0; font-size: 1.18rem; font-weight: 700; color: #0b1d3a;">Save Farm Plot Location</h3>
-                <button type="button" id="btn-close-farm-modal" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #64748b;">✕</button>
-              </div>
-              <form id="form-save-farm" onsubmit="return false;">
-                <input type="hidden" id="farm-edit-id" value="" />
-                <div style="margin-bottom: 14px;">
-                  <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 6px;">Farm / Plot Name *</label>
-                  <input type="text" id="modal-farm-name" placeholder="e.g. North Acre Wheat Plot" required style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box;" />
-                </div>
-                <div style="margin-bottom: 14px;">
-                  <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 6px;">Primary Crop Type</label>
-                  <select id="modal-crop-type" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box;">
-                    <option value="Wheat">Wheat</option>
-                    <option value="Rice (Paddy)">Rice (Paddy)</option>
-                    <option value="Cotton">Cotton</option>
-                    <option value="Maize">Maize</option>
-                    <option value="Sugarcane">Sugarcane</option>
-                    <option value="Soybean">Soybean</option>
-                    <option value="Chickpea (Gram)">Chickpea (Gram)</option>
-                    <option value="Tomato">Tomato</option>
-                    <option value="Mustard">Mustard</option>
-                    <option value="General Crop">Other / Mixed</option>
-                  </select>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
-                  <div>
-                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: #64748b; margin-bottom: 4px;">Latitude</label>
-                    <input type="number" step="any" id="modal-lat" readonly style="width: 100%; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" />
-                  </div>
-                  <div>
-                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: #64748b; margin-bottom: 4px;">Longitude</label>
-                    <input type="number" step="any" id="modal-lng" readonly style="width: 100%; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" />
-                  </div>
-                </div>
-                <div style="background: #f1f5f9; padding: 10px 12px; border-radius: 8px; margin-bottom: 18px; font-size: 0.85rem; color: #475569;">
-                  📏 <strong>Boundary Area:</strong> <span id="modal-area-display">0.00 Acres (0.00 Ha)</span>
-                </div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                  <button type="button" id="btn-cancel-modal" style="padding: 10px 16px; border: 1px solid #cbd5e1; background: #ffffff; border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: #475569; cursor: pointer;">Cancel</button>
-                  <button type="button" id="btn-save-farm-submit" class="btn-geo-primary" style="padding: 10px 20px; font-size: 0.88rem; border-radius: 8px;">Save to Supabase</button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- PANE 6: MANDI MARKET INTELLIGENCE -->
-      <section class="module-pane" id="pane-market">
-        <div class="dash-panel">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">APMC Mandi Commodity Market Intelligence</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                Verified agricultural commodity transactions from official APMC market bulletins.
-              </p>
-            </div>
-            <span class="data-source-badge">Agmarknet GoI</span>
-          </div>
-
-          <div style="margin-bottom: 20px; display: flex; gap: 12px; align-items: center;">
-            <label style="font-weight: 600; font-size: 0.9rem;">Select Commodity:</label>
-            <select id="dash-market-commodity" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem;">
-              <option value="Wheat">Wheat</option>
-              <option value="Rice">Rice</option>
-              <option value="Cotton">Cotton</option>
-              <option value="Maize">Maize</option>
-              <option value="Tomato">Tomato</option>
-              <option value="Chickpea">Chickpea</option>
-            </select>
-          </div>
-
-          <div id="dash-market-container">
-            <div style="padding: 24px; text-align: center; color: #64748b;">Loading verified market data...</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 7: FARMER COMMUNITY -->
-      <section class="module-pane" id="pane-community">
-        <div class="dash-panel">
-          <div class="panel-header">
-            <div>
-              <h3 class="panel-title">Farmer Discussion & Knowledge Exchange</h3>
-              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                Direct peer-to-peer discussions, pest advisories, and field observations stored in database.
-              </p>
-            </div>
-            <button class="btn-geo-primary" id="dash-btn-open-post" style="font-size: 0.85rem; padding: 6px 14px;">
-              ✏️ New Discussion
-            </button>
-          </div>
-
-          <!-- New Post Form Box -->
-          <div id="dash-new-post-form" style="display: none; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 24px;">
-            <h4 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Create Community Post</h4>
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">Category</label>
-              <select id="dash-post-category" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
-                <option value="general">General Farming</option>
-                <option value="soil_health">Soil Health</option>
-                <option value="crop_advice">Crop Advice</option>
-                <option value="pest_control">Pest & Disease Control</option>
-                <option value="market">Market & Mandi</option>
-              </select>
-            </div>
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">Post Title</label>
-              <input type="text" id="dash-post-title" placeholder="e.g. Managing yellow rust symptoms in wheat" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;" />
-            </div>
-            <div style="margin-bottom: 16px;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">Discussion Content</label>
-              <textarea id="dash-post-content" rows="4" placeholder="Share your field observation, question, or technique..." style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit;"></textarea>
-            </div>
-            <div style="display: flex; justify-content: flex-end; gap: 10px;">
-              <button class="btn-geo-secondary" id="dash-btn-cancel-post">Cancel</button>
-              <button class="btn-geo-primary" id="dash-btn-submit-post">Publish Post</button>
-            </div>
-          </div>
-
-          <div id="dash-community-feed">
-            <div class="empty-state-card">
-              <div class="empty-state-icon">💬</div>
-              <strong>No community discussions yet.</strong><br>
-              Start the conversation by sharing a farming update above!
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 8: AI AGRO ASSISTANT -->
-      <section class="module-pane" id="pane-assistant">
-        <div class="dash-panel" style="padding: 18px 22px;">
-          <!-- Compact Control Bar -->
-          <div class="ai-mode-header-bar" style="margin-top: 0; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <span style="font-size: 0.82rem; font-weight: 700; color: #475569;">Inference Engine:</span>
-              <div class="ai-mode-toggle-group">
-                <button type="button" class="ai-mode-btn active" id="btn-mode-cloud">
-                  <span>☁️</span> Advanced Cloud AI (Qwen3)
-                </button>
-                <button type="button" class="ai-mode-btn" id="btn-mode-offline">
-                  <span>⚡</span> Offline Browser AI (Gemma 4 E2B)
-                </button>
-              </div>
-            </div>
-
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <div id="ai-active-status-badge" class="ai-engine-status-badge cloud">
-                <span class="status-dot"></span>
-                <span id="ai-status-label">Cloud AI: Qwen3 Grounded</span>
-              </div>
-              <span id="webgpu-status-indicator" style="font-size: 0.78rem; color: #64748b; font-weight: 600;">
-                WebGPU: Checking...
-              </span>
-              <button type="button" class="btn-geo-secondary" id="btn-ai-settings-toggle" style="padding: 4px 10px; font-size: 0.78rem;">
-                ⚙️ Settings
-              </button>
-            </div>
-          </div>
-
-          <!-- Offline AI Model Information & Download Banner (Shown when Offline AI is active) -->
-          <div id="offline-ai-banner" class="offline-ai-banner" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
-              <div>
-                <h4 style="font-size: 0.96rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;" id="offline-banner-title">
-                  ⚡ On-Device Gemma 4 E2B (LiteRT-LM WebGPU)
-                </h4>
-                <p style="font-size: 0.84rem; color: #475569; line-height: 1.5; margin-bottom: 8px;" id="offline-banner-desc">
-                  Run Google's Gemma 4 E2B directly inside your browser. No queries ever leave your device.
-                  Storage requirement: <strong>~1.25 GB</strong> | Memory: <strong>~2 GB WebGPU VRAM</strong>.
-                </p>
-                <div id="offline-model-meta" style="font-size: 0.78rem; color: #64748b;">
-                  Status: Checking cached models in IndexedDB...
-                </div>
-              </div>
-
-              <div style="display: flex; gap: 8px; flex-shrink: 0;" id="offline-banner-actions">
-                <button type="button" class="btn-geo-primary" id="btn-download-gemma" style="padding: 8px 16px; font-size: 0.84rem;">
-                  Download Gemma 4 E2B
-                </button>
-                <button type="button" class="btn-geo-secondary" id="btn-clear-gemma-cache" style="padding: 8px 12px; font-size: 0.84rem; display: none;">
-                  Clear Cache
-                </button>
-              </div>
-            </div>
-
-            <!-- Download Progress Bar (Hidden by default) -->
-            <div id="offline-download-progress-box" style="display: none; margin-top: 12px;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.80rem; font-weight: 600; color: #047857;">
-                <span id="download-progress-text">Downloading Gemma 4 E2B weights: 0%</span>
-                <span id="download-speed-text">0.0 MB/s</span>
-              </div>
-              <div class="offline-progress-track">
-                <div class="offline-progress-fill" id="download-progress-fill"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #64748b;">
-                <span id="download-mb-text">0 MB / ~1,250 MB</span>
-                <span id="download-eta-text">Calculating ETA...</span>
-              </div>
-            </div>
-
-            <!-- Fallback Notice (if WebGPU unsupported) -->
-            <div id="offline-fallback-notice" style="display: none; margin-top: 10px; padding: 10px 14px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; font-size: 0.82rem; color: #854d0e;">
-              <strong>Notice:</strong> WebGPU hardware acceleration is not available in your current browser session. Geosense has seamlessly enabled the <strong>Offline Deterministic Agronomy Engine</strong> (FAO-56 evapotranspiration models + deterministic crop diagnostics) with 100% offline accuracy and zero data transmission.
-            </div>
-          </div>
-
-          <!-- Model Settings Drawer (Collapsible) -->
-          <div id="ai-settings-drawer" style="display: none; padding: 16px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 10px; margin-bottom: 16px;">
-            <h5 style="font-size: 0.88rem; font-weight: 700; margin-bottom: 10px; color: #1e293b;">LiteRT-LM Model Provider Configuration</h5>
-            <div style="display: grid; gap: 10px;">
-              <div>
-                <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #475569; margin-bottom: 4px;">Gemma 4 E2B .litertlm Endpoint URL</label>
-                <input type="text" id="input-model-provider-url" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid #cbd5e1;" value="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/model.litertlm" />
-              </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" class="btn-geo-primary" id="btn-save-model-url" style="padding: 6px 14px; font-size: 0.80rem;">Save Provider</button>
-                <button type="button" class="btn-geo-secondary" id="btn-reset-model-url" style="padding: 6px 12px; font-size: 0.80rem;">Reset Default</button>
-                <span id="save-model-url-status" style="font-size: 0.78rem; color: #10b981; font-weight: 600;"></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="chat-container">
-            <div class="chat-messages" id="dash-chat-messages">
-              <div class="chat-bubble assistant">
-                Hello! I am Geo, your AI agronomy assistant. I cross-reference your verified soil test records and live local weather to provide agronomic advisories. How can I help with your soil, crops, or irrigation today?
-              </div>
-            </div>
-            <div class="chat-input-bar">
-              <input type="text" id="dash-chat-input" placeholder="e.g., Why are my bottom wheat leaves turning yellow?" />
-              <button class="btn-geo-primary" id="dash-btn-chat-send">Send</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PANE 9: USER PROFILE -->
-      <section class="module-pane" id="pane-profile">
-        <div class="dash-panel" style="max-width: 600px;">
-          <div class="panel-header">
-            <h3 class="panel-title">Farmer Profile & Account Settings</h3>
-            <span class="data-source-badge">Authenticated Account</span>
-          </div>
-          <div style="padding: 24px; background: #fafbfc; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
-            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
-              <div class="user-avatar user-avatar-initial" style="width: 56px; height: 56px; font-size: 1.5rem;">F</div>
-              <div>
-                <h3 class="user-name-display" style="font-size: 1.25rem; font-weight: 700;">Farmer Member</h3>
-                <div class="user-email-display" style="color: #64748b;">farmer@geosense.org</div>
-              </div>
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-              <span class="farm-tag" style="background: #e0e7ff; color: #4338ca;">Role: Farmer</span>
-              <span class="farm-tag user-region-display">Farm: Punjab</span>
-            </div>
-
-            <p style="font-size: 0.88rem; color: #64748b; line-height: 1.5;">
-              Your profile is verified and synchronized with Supabase PostgreSQL and Row Level Security. All submitted soil tests, crop recommendations, and irrigation logs are linked directly to your authenticated account ID.
-            </p>
-          </div>
-        </div>
-      </section>
-
-    </div>
-  </main>
-
-  <script src="js/api-client.js"></script>
-  <script src="js/camera-service.js"></script>
-  <script src="js/offline-agro-engine.js"></script>
-  <script src="js/litert-cache.js"></script>
-  <script src="js/offline-ai-client.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-  <script src="js/farm-map.js"></script>
-  <script src="js/dashboard.js"></script>
-</body>
-</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Geosense Smart Agriculture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script>
+    // Immediate auth gate before rendering
+    if (!localStorage.getItem('geosense_auth_token')) {
+      window.location.replace('/login');
+    }
+  </script>
+</head>
+<body>
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="dashboard-sidebar">
+    <div class="sidebar-header">
+      <a href="/" class="brand-badge">
+        <svg viewBox="0 0 22 22" width="26" height="26">
+          <circle cx="11" cy="11" r="11" fill="#5b7cf0"/>
+          <path d="M7 14c0-3.5 3-6.5 6.5-6.5 0 3.5-3 6.5-6.5 6.5z" fill="#fff"/>
+          <path d="M10.5 14c0-2.2 2-4 4-4" stroke="#2fe0d0" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+        </svg>
+        <span class="brand-title">Geosense</span>
+      </a>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-target="overview">
+        <span class="icon">📊</span>
+        <span>Overview</span>
+      </button>
+      <button class="nav-item" data-target="soil">
+        <span class="icon">🧪</span>
+        <span>Soil NPK Analysis</span>
+      </button>
+      <button class="nav-item" data-target="crop">
+        <span class="icon">🌾</span>
+        <span>Crop Recommendation</span>
+      </button>
+      <button class="nav-item" data-target="irrigation">
+        <span class="icon">💧</span>
+        <span>Smart Irrigation</span>
+      </button>
+      <button class="nav-item" data-target="weather">
+        <span class="icon">⛅</span>
+        <span>Weather Intelligence</span>
+      </button>
+      <button class="nav-item" data-target="market">
+        <span class="icon">📈</span>
+        <span>Mandi Market</span>
+      </button>
+      <button class="nav-item" data-target="community">
+        <span class="icon">👥</span>
+        <span>Farmer Community</span>
+      </button>
+      <button class="nav-item" data-target="assistant">
+        <span class="icon">🤖</span>
+        <span>AI Agro Assistant</span>
+      </button>
+      <button class="nav-item" data-target="profile">
+        <span class="icon">👤</span>
+        <span>Farmer Profile</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-snippet">
+        <div class="user-info">
+          <div class="user-avatar user-avatar-initial">F</div>
+          <div class="user-details">
+            <div class="user-name user-name-display">Farmer Member</div>
+            <div class="user-role user-region-display">Farm: Punjab</div>
+          </div>
+        </div>
+        <button id="dash-btn-signout" class="btn-signout" title="Sign Out">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <main class="dashboard-main">
+    <header class="dashboard-header">
+      <h1 class="page-title" id="dashboard-page-title">Farm Overview</h1>
+      <div class="header-actions">
+        <div class="farm-tag">
+          <span class="live-indicator"></span>
+          <span>FastAPI Live: 127.0.0.1:8001</span>
+        </div>
+        <a href="/" class="btn-geo-secondary" style="font-size: 0.85rem; padding: 6px 14px;">
+          🌐 Public Site
+        </a>
+      </div>
+    </header>
+
+    <div class="dashboard-content">
+
+      <!-- PANE 1: OVERVIEW -->
+      <section class="module-pane active" id="pane-overview">
+        <div class="stats-grid">
+          <!-- Real Metric 1: Soil Tests -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Soil Tests Recorded</span>
+              <div class="stat-icon">🌱</div>
+            </div>
+            <div class="stat-value" id="ov-soil-count">0</div>
+            <div class="stat-detail" id="ov-soil-detail">No tests submitted yet</div>
+            <div style="margin-top: 8px;">
+              <span class="data-source-badge">Database Verified</span>
+            </div>
+          </div>
+
+          <!-- Real Metric 2: Saved Crop Recommendation -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Crop Model Status</span>
+              <div class="stat-icon">🌾</div>
+            </div>
+            <div class="stat-value" id="ov-crop-val" style="font-size: 1.4rem;">None</div>
+            <div class="stat-detail" id="ov-crop-detail">Run ML model to compute</div>
+            <div style="margin-top: 8px;">
+              <span class="data-source-badge calc">Scikit-Learn Model</span>
+            </div>
+          </div>
+
+          <!-- Real Metric 3: Latest Irrigation Demand -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Irrigation Requirement</span>
+              <div class="stat-icon">💧</div>
+            </div>
+            <div class="stat-value" id="ov-irrig-val" style="font-size: 1.4rem;">None</div>
+            <div class="stat-detail" id="ov-irrig-detail">No calculation performed yet</div>
+            <div style="margin-top: 8px;">
+              <span class="data-source-badge calc">FAO-56 Standard</span>
+            </div>
+          </div>
+
+          <!-- Real Metric 4: Ambient Weather Telemetry -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Ambient Weather</span>
+              <div class="stat-icon">⛅</div>
+            </div>
+            <div class="stat-value" id="ov-weather-val">--°C</div>
+            <div class="stat-detail" id="ov-weather-detail">Connecting to Open-Meteo...</div>
+            <div style="margin-top: 8px;">
+              <span class="data-source-badge live" id="ov-weather-source">Live Open-Meteo</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-row">
+          <div class="dash-panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Quick Agricultural Shortcuts</h3>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+              <button onclick="document.querySelector('[data-target=\'soil\']').click()" class="stat-card" style="cursor: pointer; text-align: left; background: #fafbfc; border-color: #cbd5e1;">
+                <div style="font-size: 1.5rem; margin-bottom: 8px;">📷</div>
+                <strong style="color: #0b1d3a;">Record Soil Test</strong>
+                <small style="color: #64748b; margin-top: 4px;">Enter lab NPK or physical scan</small>
+              </button>
+              <button onclick="document.querySelector('[data-target=\'crop\']').click()" class="stat-card" style="cursor: pointer; text-align: left; background: #fafbfc; border-color: #cbd5e1;">
+                <div style="font-size: 1.5rem; margin-bottom: 8px;">🌾</div>
+                <strong style="color: #0b1d3a;">Run Crop Model</strong>
+                <small style="color: #64748b; margin-top: 4px;">Predict suitability from soil NPK</small>
+              </button>
+              <button onclick="document.querySelector('[data-target=\'irrigation\']').click()" class="stat-card" style="cursor: pointer; text-align: left; background: #fafbfc; border-color: #cbd5e1;">
+                <div style="font-size: 1.5rem; margin-bottom: 8px;">💧</div>
+                <strong style="color: #0b1d3a;">Water Calculator</strong>
+                <small style="color: #64748b; margin-top: 4px;">Calculate exact liter deficit</small>
+              </button>
+            </div>
+          </div>
+
+          <div class="dash-panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Recent Field Activities</h3>
+              <span class="data-source-badge">Real Activity Log</span>
+            </div>
+            <div id="ov-activities-container">
+              <div class="empty-state-card" style="padding: 24px;">
+                No recent field activities recorded. Your actions will appear here as you log soil tests, run crop models, or calculate irrigation.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 2: SOIL NPK ANALYSIS -->
+      <section class="module-pane" id="pane-soil">
+        <!-- Sub-Module 1: Physical Camera Diagnostic -->
+        <div class="dash-panel" style="margin-bottom: 24px;">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">1. Camera Optical Soil Evaluation & Physical Diagnostics</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                OpenCV image pipeline verifying surface focus, lighting exposure, and observable physical texture.
+              </p>
+            </div>
+            <span class="data-source-badge">Computer Vision</span>
+          </div>
+
+          <div class="camera-box">
+            <video id="dash-soil-video" autoplay playsinline muted></video>
+            <img id="dash-soil-preview" alt="Soil preview" />
+
+            <div id="dash-soil-placeholder">
+              <div style="font-size: 3rem; margin-bottom: 10px;">📸</div>
+              <strong style="color: #0b1d3a; font-size: 1.1rem;">Ready to Evaluate Soil Photo</strong>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">Capture using mobile camera or upload from your gallery</p>
+            </div>
+
+            <input type="file" id="dash-soil-file" accept="image/jpeg,image/png,image/webp" style="display: none;" />
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button type="button" class="btn-geo-secondary" id="dash-btn-camera">📷 Open Device Camera</button>
+            <button type="button" class="btn-geo-secondary" id="dash-btn-snap" style="display: none;">⚡ Capture Frame</button>
+            <button type="button" class="btn-geo-secondary" id="dash-btn-upload">📁 Choose from Gallery</button>
+            <button type="button" class="btn-geo-secondary" id="dash-btn-reset" style="display: none;">🔄 Reset</button>
+            <button type="button" class="btn-geo-primary" id="dash-btn-analyze" disabled>Run AI Quality Check</button>
+          </div>
+
+          <div id="dash-soil-result"></div>
+        </div>
+
+        <!-- Sub-Module 2: Real Lab / Physical Sensor Ingestion -->
+        <div class="dash-panel" style="margin-bottom: 24px;">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">2. Enter Verified Soil Test Measurements (Lab or Sensor)</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                Record actual quantitative values from certified soil testing laboratories, sensor kits, or manual test strips.
+              </p>
+            </div>
+            <span class="data-source-badge lab">Certified Assays</span>
+          </div>
+
+          <form id="dash-manual-soil-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;">
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Nitrogen (N) [kg/ha]</label>
+                <input type="number" id="inp-soil-n" value="75" min="0" max="500" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Phosphorus (P) [kg/ha]</label>
+                <input type="number" id="inp-soil-p" value="38" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Potassium (K) [kg/ha]</label>
+                <input type="number" id="inp-soil-k" value="65" min="0" max="500" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Soil pH (0.0 - 14.0)</label>
+                <input type="number" id="inp-soil-ph" step="0.1" value="6.8" min="0" max="14" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Electrical Conductivity (EC) [dS/m]</label>
+                <input type="number" id="inp-soil-ec" step="0.01" value="0.85" min="0" max="20" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Soil Moisture (%)</label>
+                <input type="number" id="inp-soil-moisture" value="45" min="0" max="100" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Data Source / Equipment</label>
+                <select id="inp-soil-source-type" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;">
+                  <option value="laboratory_report">Certified Agricultural Laboratory Report</option>
+                  <option value="physical_sensor">Calibrated Physical Field Sensor Kit</option>
+                  <option value="manual_entry">Manual Chemical Test Kit</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Testing Facility / Kit Name</label>
+                <input type="text" id="inp-soil-lab-name" value="IARI / KVK Soil Health Lab" placeholder="e.g. State Agricultural University Lab" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+            </div>
+
+            <button type="submit" class="btn-geo-primary" id="btn-save-soil-test">Save Verified Soil Test to Database</button>
+          </form>
+          <div id="dash-manual-soil-msg" style="margin-top: 14px;"></div>
+        </div>
+
+        <!-- Sub-Module 3: Soil Test History -->
+        <div class="dash-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Saved Soil Test History</h3>
+            <span class="data-source-badge">Database Records</span>
+          </div>
+          <div id="dash-soil-history-list">
+            <div class="empty-state-card">
+              <div class="empty-state-icon">🌱</div>
+              <strong>No soil tests yet.</strong><br>
+              Add your first soil report or camera scan above to get started.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 3: CROP RECOMMENDATION -->
+      <section class="module-pane" id="pane-crop">
+        <div class="dash-panel" style="margin-bottom: 24px;">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Machine Learning Crop Recommendation Model</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                Calibrated Scikit-Learn Random Forest model predicting optimum crop suitability from 7 agro-climatic parameters.
+              </p>
+            </div>
+            <span class="data-source-badge calc">Scikit-Learn Classifier</span>
+          </div>
+
+          <form id="dash-crop-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px;">
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Nitrogen (N) [kg/ha]</label>
+                <input type="number" name="n" value="80" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Phosphorus (P) [kg/ha]</label>
+                <input type="number" name="p" value="45" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Potassium (K) [kg/ha]</label>
+                <input type="number" name="k" value="40" min="0" max="300" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Soil pH (0 - 14)</label>
+                <input type="number" name="ph" step="0.1" value="6.5" min="0" max="14" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Temperature (°C)</label>
+                <input type="number" name="temp" step="0.1" value="26.0" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Relative Humidity (%)</label>
+                <input type="number" name="humidity" step="0.1" value="80" min="0" max="100" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size: 0.85rem; font-weight:600; margin-bottom:6px;">Annual Rainfall (mm)</label>
+                <input type="number" name="rainfall" value="1200" min="0" max="2500" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+            </div>
+
+            <button type="submit" class="btn-geo-primary" id="btn-run-crop-model">Compute Crop Recommendation</button>
+          </form>
+
+          <div id="dash-crop-result"></div>
+        </div>
+
+        <!-- Saved Crop Recommendations History -->
+        <div class="dash-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Saved Crop Recommendations</h3>
+            <span class="data-source-badge">Database Records</span>
+          </div>
+          <div id="dash-crop-history-list">
+            <div class="empty-state-card">
+              <div class="empty-state-icon">🌾</div>
+              <strong>No crop recommendations saved yet.</strong><br>
+              Run your first recommendation above to see results here.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 4: SMART IRRIGATION -->
+      <section class="module-pane" id="pane-irrigation">
+        <div class="dash-panel" style="margin-bottom: 24px;">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Smart Irrigation Scheduling & Water Requirement</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                FAO-56 Penman-Monteith Evapotranspiration standard calculating volumetric water demand from soil moisture deficit.
+              </p>
+            </div>
+            <span class="data-source-badge calc">FAO-56 Methodology</span>
+          </div>
+
+          <form id="dash-irrigation-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px;">
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Crop</label>
+                <select name="crop" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;">
+                  <option value="Wheat">Wheat</option>
+                  <option value="Rice" selected>Rice</option>
+                  <option value="Maize">Maize</option>
+                  <option value="Cotton">Cotton</option>
+                  <option value="Tomato">Tomato</option>
+                  <option value="Sugarcane">Sugarcane</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Growth Stage</label>
+                <select name="stage" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;">
+                  <option value="initial">Initial</option>
+                  <option value="vegetative" selected>Vegetative</option>
+                  <option value="flowering">Flowering</option>
+                  <option value="yield_formation">Yield Formation</option>
+                  <option value="ripening">Ripening</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Current Soil Moisture (%)</label>
+                <input type="number" name="moisture" value="40" min="0" max="100" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Field Area (Acres)</label>
+                <input type="number" name="acres" value="2.5" step="0.1" min="0.1" max="1000" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px;">Forecast Rainfall (mm)</label>
+                <input type="number" name="rain" value="0" min="0" max="300" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;" />
+              </div>
+            </div>
+
+            <button type="submit" class="btn-geo-primary">Calculate Water Requirement</button>
+          </form>
+
+          <div id="dash-irrigation-result"></div>
+        </div>
+
+        <!-- Irrigation Records History -->
+        <div class="dash-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">Saved Irrigation History</h3>
+            <span class="data-source-badge">Database Records</span>
+          </div>
+          <div id="dash-irrigation-history-list">
+            <div class="empty-state-card">
+              <div class="empty-state-icon">💧</div>
+              <strong>No irrigation records yet.</strong><br>
+              Compute your first field requirement above to see records here.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 5: WEATHER INTELLIGENCE -->
+      <section class="module-pane" id="pane-weather">
+        <div class="dash-panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Live Agro-Meteorological Telemetry</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                High-precision real-time conditions, satellite agro-telemetry, and multi-day agricultural forecast.
+              </p>
+            </div>
+            <span class="data-source-badge live" id="badge-weather-source">OpenWeatherMap Live</span>
+          </div>
+
+          <!-- Location Selector & GPS Bar -->
+          <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: #f8fafc; padding: 12px 16px; border-radius: 10px; border: 1px solid #e2e8f0;">
+            <div style="position: relative; flex: 1; min-width: 220px;">
+              <input type="text" id="weather-search-input" placeholder="Search any city, district or village (e.g., Bengaluru, Mandya, Pune, Delhi)..." style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; outline: none; box-sizing: border-box;" />
+            </div>
+            <button id="btn-weather-search" class="btn-geo-primary" style="padding: 9px 16px; font-size: 0.88rem; border-radius: 8px;">Search Location</button>
+            <button id="btn-weather-gps" type="button" style="padding: 9px 14px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: #0b1d3a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <span>📍 Detect My Live GPS</span>
+            </button>
+          </div>
+
+          <div id="dash-weather-container">
+            <div style="padding: 24px; text-align: center; color: #64748b;">Loading live telemetry...</div>
+          </div>
+        </div>
+
+        <!-- FARM LOCATION INTELLIGENCE & SATELLITE ACREAGE MAP -->
+        <div class="dash-panel" id="farm-location-intelligence-panel" style="margin-top: 24px; position: relative;">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h3 class="panel-title" style="display: flex; align-items: center; gap: 8px;">
+                <span>🛰️ Farm Location Intelligence Map</span>
+                <span class="data-source-badge live">Live Satellite GIS</span>
+              </h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                Interactive high-resolution agricultural satellite GIS. Click to drop farm markers, draw field boundaries, calculate acreage, and link telemetry to live micro-climate weather.
+              </p>
+            </div>
+
+            <!-- Top Action Controls -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <button type="button" class="btn-geo-primary" id="btn-open-save-farm" style="padding: 8px 14px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+                <span>💾 Save Farm Plot</span>
+              </button>
+              <button type="button" id="btn-toggle-saved-farms" style="padding: 8px 14px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; font-weight: 600; color: #0b1d3a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                <span>📂 Saved Farms (<span id="saved-farms-count">0</span>)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Saved Farms Drawer (Collapsible) -->
+          <div id="saved-farms-drawer" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <h4 style="font-size: 0.92rem; font-weight: 700; color: #0b1d3a; margin: 0;">Your Saved Agricultural Plots</h4>
+              <button type="button" id="btn-close-saved-drawer" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b;">✕</button>
+            </div>
+            <div id="saved-farms-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
+              <div style="padding: 12px; color: #64748b; font-size: 0.85rem;">Loading saved plots...</div>
+            </div>
+          </div>
+
+          <!-- Map HUD & Quick Action Toolbar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; background: #ffffff; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <!-- Farm Location Search Box & Live GPS Button -->
+            <div style="display: flex; gap: 8px; flex: 1; min-width: 280px; max-width: 520px; align-items: center;">
+              <input type="text" id="map-search-input" placeholder="Search village, town, or farm location..." style="flex: 1; padding: 7px 12px; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #f8fafc;" />
+              <button type="button" id="btn-map-search" class="btn-geo-primary" style="padding: 7px 14px; font-size: 0.84rem; border-radius: 6px; white-space: nowrap;">Search</button>
+              <button type="button" id="btn-map-current-gps" style="padding: 7px 12px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; font-size: 0.84rem; font-weight: 600; color: #166534; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;">
+                <span>📍 Use My Current Location</span>
+              </button>
+            </div>
+
+            <!-- Map Controls (Layers & Boundary) -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <!-- Map Layers Pill Switcher -->
+              <div style="display: inline-flex; background: #f1f5f9; padding: 3px; border-radius: 8px; gap: 4px;">
+                <button type="button" id="btn-layer-satellite" class="map-layer-btn active" style="padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: #0b1d3a; color: #ffffff;">
+                  🛰️ Satellite View (Default)
+                </button>
+                <button type="button" id="btn-layer-street" class="map-layer-btn" style="padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: transparent; color: #475569;">
+                  🗺️ Street Map
+                </button>
+              </div>
+
+              <!-- Boundary Drawing Tool Buttons -->
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" id="btn-draw-boundary" style="padding: 6px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #1d4ed8; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                  <span>✏️ Draw Boundary</span>
+                </button>
+                <button type="button" id="btn-clear-boundary" style="padding: 6px 12px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 6px; font-size: 0.82rem; font-weight: 600; color: #e11d48; cursor: pointer;">
+                  <span>🗑️ Clear Boundary</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Leaflet Interactive Map Canvas -->
+          <div style="position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(11, 29, 58, 0.06);">
+            <div id="farm-map-canvas" style="width: 100%; height: 500px; z-index: 1;"></div>
+
+            <!-- Floating Geodesic Readout HUD (Top Right of Map) -->
+            <div id="map-telemetry-hud" style="position: absolute; top: 12px; right: 12px; z-index: 1000; background: rgba(11, 29, 58, 0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #ffffff; padding: 10px 14px; border-radius: 10px; font-size: 0.82rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); max-width: 290px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px;">
+                <strong style="color: #2fe0d0; display: flex; align-items: center; gap: 4px;">
+                  <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2fe0d0;"></span>
+                  Telemetry HUD
+                </strong>
+                <span id="hud-status" style="font-size: 0.72rem; color: #94a3b8;">Click map to pin</span>
+              </div>
+              <div style="line-height: 1.5;">
+                <div>📍 <strong>Coord:</strong> <span id="hud-coords">12.9753° N, 77.5910° E</span></div>
+                <div>🌾 <strong>Area:</strong> <span id="hud-area">0.00 Acres (0.00 Ha)</span></div>
+                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.15); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.76rem;">
+                  <div>🌡️ <span id="hud-temp">--°C</span></div>
+                  <div>💧 <span id="hud-humidity">--% RH</span></div>
+                  <div>🌧️ <span id="hud-rain">0 mm</span></div>
+                  <div>☀️ <span id="hud-et">-- mm ET₀</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Map Hint Bar (Bottom of Map) -->
+            <div style="position: absolute; bottom: 8px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.92); backdrop-filter: blur(4px); color: #0b1d3a; padding: 4px 10px; border-radius: 6px; font-size: 0.74rem; font-weight: 500; border: 1px solid #cbd5e1;">
+              💡 <em>Click anywhere to drop marker • Drag marker to adjust • Click "Draw Boundary" to trace field</em>
+            </div>
+          </div>
+
+          <!-- Save / Edit Farm Modal Dialog -->
+          <div id="farm-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 29, 58, 0.6); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
+            <div style="background: #ffffff; border-radius: 16px; width: 100%; max-width: 480px; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); border: 1px solid #cbd5e1;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 id="farm-modal-title" style="margin: 0; font-size: 1.18rem; font-weight: 700; color: #0b1d3a;">Save Farm Plot Location</h3>
+                <button type="button" id="btn-close-farm-modal" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #64748b;">✕</button>
+              </div>
+              <form id="form-save-farm" onsubmit="return false;">
+                <input type="hidden" id="farm-edit-id" value="" />
+                <div style="margin-bottom: 14px;">
+                  <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 6px;">Farm / Plot Name *</label>
+                  <input type="text" id="modal-farm-name" placeholder="e.g. North Acre Wheat Plot" required style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box;" />
+                </div>
+                <div style="margin-bottom: 14px;">
+                  <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #334155; margin-bottom: 6px;">Primary Crop Type</label>
+                  <select id="modal-crop-type" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box;">
+                    <option value="Wheat">Wheat</option>
+                    <option value="Rice (Paddy)">Rice (Paddy)</option>
+                    <option value="Cotton">Cotton</option>
+                    <option value="Maize">Maize</option>
+                    <option value="Sugarcane">Sugarcane</option>
+                    <option value="Soybean">Soybean</option>
+                    <option value="Chickpea (Gram)">Chickpea (Gram)</option>
+                    <option value="Tomato">Tomato</option>
+                    <option value="Mustard">Mustard</option>
+                    <option value="General Crop">Other / Mixed</option>
+                  </select>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+                  <div>
+                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: #64748b; margin-bottom: 4px;">Latitude</label>
+                    <input type="number" step="any" id="modal-lat" readonly style="width: 100%; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" />
+                  </div>
+                  <div>
+                    <label style="display: block; font-size: 0.82rem; font-weight: 600; color: #64748b; margin-bottom: 4px;">Longitude</label>
+                    <input type="number" step="any" id="modal-lng" readonly style="width: 100%; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" />
+                  </div>
+                </div>
+                <div style="background: #f1f5f9; padding: 10px 12px; border-radius: 8px; margin-bottom: 18px; font-size: 0.85rem; color: #475569;">
+                  📏 <strong>Boundary Area:</strong> <span id="modal-area-display">0.00 Acres (0.00 Ha)</span>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                  <button type="button" id="btn-cancel-modal" style="padding: 10px 16px; border: 1px solid #cbd5e1; background: #ffffff; border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: #475569; cursor: pointer;">Cancel</button>
+                  <button type="button" id="btn-save-farm-submit" class="btn-geo-primary" style="padding: 10px 20px; font-size: 0.88rem; border-radius: 8px;">Save to Supabase</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- PANE 6: MANDI MARKET INTELLIGENCE -->
+      <section class="module-pane" id="pane-market">
+        <div class="dash-panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">APMC Mandi Commodity Market Intelligence</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                Verified agricultural commodity transactions from official APMC market bulletins.
+              </p>
+            </div>
+            <span class="data-source-badge">Agmarknet GoI</span>
+          </div>
+
+          <div style="margin-bottom: 20px; display: flex; gap: 12px; align-items: center;">
+            <label style="font-weight: 600; font-size: 0.9rem;">Select Commodity:</label>
+            <select id="dash-market-commodity" style="padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem;">
+              <option value="Wheat">Wheat</option>
+              <option value="Rice">Rice</option>
+              <option value="Cotton">Cotton</option>
+              <option value="Maize">Maize</option>
+              <option value="Tomato">Tomato</option>
+              <option value="Chickpea">Chickpea</option>
+            </select>
+          </div>
+
+          <div id="dash-market-container">
+            <div style="padding: 24px; text-align: center; color: #64748b;">Loading verified market data...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 7: FARMER COMMUNITY -->
+      <section class="module-pane" id="pane-community">
+        <div class="dash-panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Farmer Discussion & Knowledge Exchange</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
+                Direct peer-to-peer discussions, pest advisories, and field observations stored in database.
+              </p>
+            </div>
+            <button class="btn-geo-primary" id="dash-btn-open-post" style="font-size: 0.85rem; padding: 6px 14px;">
+              ✏️ New Discussion
+            </button>
+          </div>
+
+          <!-- New Post Form Box -->
+          <div id="dash-new-post-form" style="display: none; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 24px;">
+            <h4 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Create Community Post</h4>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">Category</label>
+              <select id="dash-post-category" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <option value="general">General Farming</option>
+                <option value="soil_health">Soil Health</option>
+                <option value="crop_advice">Crop Advice</option>
+                <option value="pest_control">Pest & Disease Control</option>
+                <option value="market">Market & Mandi</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">Post Title</label>
+              <input type="text" id="dash-post-title" placeholder="e.g. Managing yellow rust symptoms in wheat" style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;" />
+            </div>
+            <div style="margin-bottom: 16px;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">Discussion Content</label>
+              <textarea id="dash-post-content" rows="4" placeholder="Share your field observation, question, or technique..." style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit;"></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+              <button class="btn-geo-secondary" id="dash-btn-cancel-post">Cancel</button>
+              <button class="btn-geo-primary" id="dash-btn-submit-post">Publish Post</button>
+            </div>
+          </div>
+
+          <div id="dash-community-feed">
+            <div class="empty-state-card">
+              <div class="empty-state-icon">💬</div>
+              <strong>No community discussions yet.</strong><br>
+              Start the conversation by sharing a farming update above!
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 8: AI AGRO ASSISTANT -->
+      <section class="module-pane" id="pane-assistant">
+        <div class="dash-panel" style="padding: 18px 22px;">
+          <!-- Compact Control Bar -->
+          <div class="ai-mode-header-bar" style="margin-top: 0; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="font-size: 0.82rem; font-weight: 700; color: #475569;">Inference Engine:</span>
+              <div class="ai-mode-toggle-group">
+                <button type="button" class="ai-mode-btn active" id="btn-mode-cloud">
+                  <span>☁️</span> Advanced Cloud AI (Qwen3)
+                </button>
+                <button type="button" class="ai-mode-btn" id="btn-mode-offline">
+                  <span>⚡</span> Offline Browser AI (Gemma 4 E2B)
+                </button>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <div id="ai-active-status-badge" class="ai-engine-status-badge cloud">
+                <span class="status-dot"></span>
+                <span id="ai-status-label">Cloud AI: Qwen3 Grounded</span>
+              </div>
+              <span id="webgpu-status-indicator" style="font-size: 0.78rem; color: #64748b; font-weight: 600;">
+                WebGPU: Checking...
+              </span>
+              <button type="button" class="btn-geo-secondary" id="btn-ai-settings-toggle" style="padding: 4px 10px; font-size: 0.78rem;">
+                ⚙️ Settings
+              </button>
+            </div>
+          </div>
+
+          <!-- Offline AI Model Information & Download Banner (Shown when Offline AI is active) -->
+          <div id="offline-ai-banner" class="offline-ai-banner" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+              <div>
+                <h4 style="font-size: 0.96rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;" id="offline-banner-title">
+                  ⚡ On-Device Gemma 4 E2B (LiteRT-LM WebGPU)
+                </h4>
+                <p style="font-size: 0.84rem; color: #475569; line-height: 1.5; margin-bottom: 8px;" id="offline-banner-desc">
+                  Run Google's Gemma 4 E2B directly inside your browser. No queries ever leave your device.
+                  Storage requirement: <strong>~1.25 GB</strong> | Memory: <strong>~2 GB WebGPU VRAM</strong>.
+                </p>
+                <div id="offline-model-meta" style="font-size: 0.78rem; color: #64748b;">
+                  Status: Checking cached models in IndexedDB...
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 8px; flex-shrink: 0;" id="offline-banner-actions">
+                <button type="button" class="btn-geo-primary" id="btn-download-gemma" style="padding: 8px 16px; font-size: 0.84rem;">
+                  Download Gemma 4 E2B
+                </button>
+                <button type="button" class="btn-geo-secondary" id="btn-clear-gemma-cache" style="padding: 8px 12px; font-size: 0.84rem; display: none;">
+                  Clear Cache
+                </button>
+              </div>
+            </div>
+
+            <!-- Download Progress Bar (Hidden by default) -->
+            <div id="offline-download-progress-box" style="display: none; margin-top: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.80rem; font-weight: 600; color: #047857;">
+                <span id="download-progress-text">Downloading Gemma 4 E2B weights: 0%</span>
+                <span id="download-speed-text">0.0 MB/s</span>
+              </div>
+              <div class="offline-progress-track">
+                <div class="offline-progress-fill" id="download-progress-fill"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #64748b;">
+                <span id="download-mb-text">0 MB / ~1,250 MB</span>
+                <span id="download-eta-text">Calculating ETA...</span>
+              </div>
+            </div>
+
+            <!-- Fallback Notice (if WebGPU unsupported) -->
+            <div id="offline-fallback-notice" style="display: none; margin-top: 10px; padding: 10px 14px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; font-size: 0.82rem; color: #854d0e;">
+              <strong>Notice:</strong> WebGPU hardware acceleration is not available in your current browser session. Geosense has seamlessly enabled the <strong>Offline Deterministic Agronomy Engine</strong> (FAO-56 evapotranspiration models + deterministic crop diagnostics) with 100% offline accuracy and zero data transmission.
+            </div>
+          </div>
+
+          <!-- Model Settings Drawer (Collapsible) -->
+          <div id="ai-settings-drawer" style="display: none; padding: 16px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 10px; margin-bottom: 16px;">
+            <h5 style="font-size: 0.88rem; font-weight: 700; margin-bottom: 10px; color: #1e293b;">LiteRT-LM Model Provider Configuration</h5>
+            <div style="display: grid; gap: 10px;">
+              <div>
+                <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #475569; margin-bottom: 4px;">Gemma 4 E2B .litertlm Endpoint URL</label>
+                <input type="text" id="input-model-provider-url" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid #cbd5e1;" value="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/model.litertlm" />
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn-geo-primary" id="btn-save-model-url" style="padding: 6px 14px; font-size: 0.80rem;">Save Provider</button>
+                <button type="button" class="btn-geo-secondary" id="btn-reset-model-url" style="padding: 6px 12px; font-size: 0.80rem;">Reset Default</button>
+                <span id="save-model-url-status" style="font-size: 0.78rem; color: #10b981; font-weight: 600;"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-container">
+            <div class="chat-messages" id="dash-chat-messages">
+              <div class="chat-bubble assistant">
+                Hello! I am Geo, your AI agronomy assistant. I cross-reference your verified soil test records and live local weather to provide agronomic advisories. How can I help with your soil, crops, or irrigation today?
+              </div>
+            </div>
+            <div class="chat-input-bar">
+              <input type="text" id="dash-chat-input" placeholder="e.g., Why are my bottom wheat leaves turning yellow?" />
+              <button class="btn-geo-primary" id="dash-btn-chat-send">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 9: USER PROFILE -->
+      <section class="module-pane" id="pane-profile">
+        <div class="dash-panel" style="max-width: 600px;">
+          <div class="panel-header">
+            <h3 class="panel-title">Farmer Profile & Account Settings</h3>
+            <span class="data-source-badge">Authenticated Account</span>
+          </div>
+          <div style="padding: 24px; background: #fafbfc; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+              <div class="user-avatar user-avatar-initial" style="width: 56px; height: 56px; font-size: 1.5rem;">F</div>
+              <div>
+                <h3 class="user-name-display" style="font-size: 1.25rem; font-weight: 700;">Farmer Member</h3>
+                <div class="user-email-display" style="color: #64748b;">farmer@geosense.org</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+              <span class="farm-tag" style="background: #e0e7ff; color: #4338ca;">Role: Farmer</span>
+              <span class="farm-tag user-region-display">Farm: Punjab</span>
+            </div>
+
+            <p style="font-size: 0.88rem; color: #64748b; line-height: 1.5;">
+              Your profile is verified and synchronized with Supabase PostgreSQL and Row Level Security. All submitted soil tests, crop recommendations, and irrigation logs are linked directly to your authenticated account ID.
+            </p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="js/api-client.js"></script>
+  <script src="js/camera-service.js"></script>
+  <script src="js/offline-agro-engine.js"></script>
+  <script src="js/litert-cache.js"></script>
+  <script src="js/offline-ai-client.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="js/farm-map.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

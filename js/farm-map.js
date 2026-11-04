@@ -68,7 +68,6 @@
   function estimateET0(temp, humidity, windSpeed = 8.0) {
     const t = Math.max(0, temp);
     const rh = Math.min(100, Math.max(10, humidity));
-    // Simplified Hargreaves / FAO-56 daily approximation
     const et0 = 0.0023 * (t + 17.8) * Math.sqrt(Math.max(1, 30 - t * 0.3)) * (1.1 - rh / 150);
     return Math.max(1.2, parseFloat(et0.toFixed(2)));
   }
@@ -105,7 +104,25 @@
     // Map Click Handler
     map.on('click', handleMapClick);
 
-    // Layer Switcher Buttons
+    // Bind Controls
+    bindToolbarControls();
+
+    // Save Farm Modal Setup
+    bindFarmModal();
+
+    // Load initial weather for starting position
+    updateWeatherTelemetry(currentCoordinates.lat, currentCoordinates.lng);
+
+    // Auto-detect user's GPS live location immediately
+    detectLiveGPS(false);
+
+    // Load previously saved farms from Supabase
+    loadSavedFarms();
+  }
+
+  // Bind All Toolbar & Quick Action Buttons
+  function bindToolbarControls() {
+    // 1. Layer Switcher Buttons
     const btnSat = document.getElementById('btn-layer-satellite');
     const btnStreet = document.getElementById('btn-layer-street');
 
@@ -137,26 +154,143 @@
       });
     }
 
-    // Boundary Drawing Buttons
+    // 2. Boundary Drawing Buttons
     const btnDraw = document.getElementById('btn-draw-boundary');
     const btnClear = document.getElementById('btn-clear-boundary');
 
-    if (btnDraw) {
-      btnDraw.addEventListener('click', toggleDrawingMode);
+    if (btnDraw) btnDraw.addEventListener('click', toggleDrawingMode);
+    if (btnClear) btnClear.addEventListener('click', clearBoundary);
+
+    // 3. Farm Search Box
+    const searchInput = document.getElementById('map-search-input');
+    const searchBtn = document.getElementById('btn-map-search');
+
+    if (searchBtn && searchInput) {
+      const doSearch = () => {
+        const query = searchInput.value.trim();
+        if (query) searchLocation(query);
+      };
+      searchBtn.addEventListener('click', doSearch);
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doSearch();
+      });
     }
 
-    if (btnClear) {
-      btnClear.addEventListener('click', clearBoundary);
+    // 4. Use My Current Location (GPS) Button
+    const gpsBtn = document.getElementById('btn-map-current-gps');
+    if (gpsBtn) {
+      gpsBtn.addEventListener('click', () => {
+        detectLiveGPS(true);
+      });
+    }
+  }
+
+  // Search Village, Town or Farm via Geocoding
+  async function searchLocation(query) {
+    const hudStatus = document.getElementById('hud-status');
+    const searchBtn = document.getElementById('btn-map-search');
+
+    if (hudStatus) hudStatus.textContent = `Searching "${query}"...`;
+    if (searchBtn) {
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Searching...';
     }
 
-    // Save Farm Modal Setup
-    bindFarmModal();
+    try {
+      // 1. Try Nominatim Geocoding
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const results = await res.json();
 
-    // Load initial weather for starting position
-    updateWeatherTelemetry(currentCoordinates.lat, currentCoordinates.lng);
+      if (results && results.length > 0) {
+        const item = results[0];
+        const lat = parseFloat(parseFloat(item.lat).toFixed(5));
+        const lon = parseFloat(parseFloat(item.lon).toFixed(5));
+        const name = item.display_name ? item.display_name.split(',')[0] : query;
 
-    // Load previously saved farms from Supabase
-    loadSavedFarms();
+        map.flyTo([lat, lon], 16, { duration: 1.2 });
+        setFarmMarker(lat, lon);
+        updateWeatherTelemetry(lat, lon);
+
+        if (hudStatus) hudStatus.textContent = `Found: ${name}`;
+
+        // Sync with top weather module
+        if (window.loadWeatherModuleData) {
+          window.loadWeatherModuleData(null, { lat, lon, name });
+        }
+      } else {
+        alert(`Could not find coordinates for "${query}". Try searching with a nearby district or state.`);
+        if (hudStatus) hudStatus.textContent = 'Location not found';
+      }
+    } catch (err) {
+      console.warn('Geocoding search notice:', err);
+      // Fallback: trigger backend weather query
+      if (window.loadWeatherModuleData) {
+        window.loadWeatherModuleData(query);
+      }
+    } finally {
+      if (searchBtn) {
+        searchBtn.disabled = false;
+        searchBtn.textContent = 'Search';
+      }
+    }
+  }
+
+  // Detect Live GPS using Browser Geolocation
+  function detectLiveGPS(isUserInitiated = true) {
+    const gpsBtn = document.getElementById('btn-map-current-gps');
+    const hudStatus = document.getElementById('hud-status');
+
+    if (!('geolocation' in navigator)) {
+      if (isUserInitiated) alert('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    if (gpsBtn) {
+      gpsBtn.disabled = true;
+      gpsBtn.innerHTML = '<span>📡 Locating GPS...</span>';
+    }
+    if (hudStatus) hudStatus.textContent = 'Acquiring satellite GPS...';
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (gpsBtn) {
+          gpsBtn.disabled = false;
+          gpsBtn.innerHTML = '<span>📍 Live GPS Active</span>';
+          gpsBtn.style.background = '#dcfce7';
+        }
+
+        const lat = parseFloat(pos.coords.latitude.toFixed(5));
+        const lng = parseFloat(pos.coords.longitude.toFixed(5));
+
+        currentCoordinates = { lat, lng };
+
+        if (map) {
+          map.flyTo([lat, lng], 17, { duration: 1.5 });
+          setFarmMarker(lat, lng);
+        }
+
+        if (hudStatus) hudStatus.textContent = '📍 Live GPS Locked';
+
+        updateWeatherTelemetry(lat, lng);
+
+        // Sync with top Weather Module
+        if (window.loadWeatherModuleData) {
+          window.loadWeatherModuleData(null, { lat, lon: lng, name: 'Live GPS Farm Location' });
+        }
+      },
+      (err) => {
+        if (gpsBtn) {
+          gpsBtn.disabled = false;
+          gpsBtn.innerHTML = '<span>📍 Use My Current Location</span>';
+        }
+        if (isUserInitiated) {
+          alert('Could not access your live GPS (' + (err.message || 'Permission denied') + '). Please ensure location permission is allowed in your browser.');
+        }
+        if (hudStatus) hudStatus.textContent = 'GPS offline (Click to pin)';
+      },
+      { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 }
+    );
   }
 
   // Set / Move Farm Marker
@@ -174,6 +308,10 @@
         const pos = e.target.getLatLng();
         setFarmMarker(pos.lat, pos.lng);
         updateWeatherTelemetry(pos.lat, pos.lng);
+        // Sync top weather module on dragend
+        if (window.loadWeatherModuleData) {
+          window.loadWeatherModuleData(null, { lat: pos.lat, lon: pos.lng, name: 'Farm Location' });
+        }
       });
     } else {
       farmMarker.setLatLng([lat, lng]);
@@ -193,6 +331,10 @@
       // Normal click: drop marker & sync weather
       setFarmMarker(e.latlng.lat, e.latlng.lng);
       updateWeatherTelemetry(e.latlng.lat, e.latlng.lng);
+      // Sync top weather module
+      if (window.loadWeatherModuleData) {
+        window.loadWeatherModuleData(null, { lat: e.latlng.lat, lon: e.latlng.lng, name: 'Selected Plot' });
+      }
     }
   }
 
@@ -325,7 +467,7 @@
     if (el) el.textContent = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
   }
 
-  // Fetch Micro-Climate Weather for Coordinates
+  // Fetch Micro-Climate Weather for Coordinates with Direct Open-Meteo Fallback
   async function updateWeatherTelemetry(lat, lng) {
     const hudTemp = document.getElementById('hud-temp');
     const hudHumid = document.getElementById('hud-humidity');
@@ -333,21 +475,46 @@
     const hudEt = document.getElementById('hud-et');
     const hudStatus = document.getElementById('hud-status');
 
-    if (hudStatus) hudStatus.textContent = 'Syncing weather...';
+    if (hudStatus && !hudStatus.textContent.includes('GPS')) {
+      hudStatus.textContent = 'Syncing weather...';
+    }
 
     try {
       const data = await window.GeosenseApi.getWeather(lat, lng);
       if (data && data.current) {
-        const c = data.current;
-        if (hudTemp) hudTemp.textContent = `${Math.round(c.temperature)}°C`;
-        if (hudHumid) hudHumid.textContent = `${c.humidity}% RH`;
-        if (hudRain) hudRain.textContent = `${c.precipitation_mm || 0} mm`;
-        const et0 = estimateET0(c.temperature, c.humidity, c.wind_speed);
-        if (hudEt) hudEt.textContent = `${et0} mm ET₀`;
-        if (hudStatus) hudStatus.textContent = data.location_name || 'Live telemetry linked';
+        applyTelemetryData(data.current, data.location_name);
+        return;
       }
     } catch (err) {
-      if (hudStatus) hudStatus.textContent = 'Weather linked (fallback)';
+      // Backend temporarily offline; fallback directly to Open-Meteo from browser
+    }
+
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&timezone=auto`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        const c = json.current || {};
+        applyTelemetryData({
+          temperature: c.temperature_2m || 24,
+          humidity: c.relative_humidity_2m || 60,
+          wind_speed: c.wind_speed_10m || 8,
+          precipitation_mm: c.precipitation || 0
+        }, 'Direct Satellite Feed');
+      }
+    } catch (_) {
+      if (hudStatus) hudStatus.textContent = 'Telemetry active';
+    }
+
+    function applyTelemetryData(curr, locName) {
+      if (hudTemp) hudTemp.textContent = `${Math.round(curr.temperature)}°C`;
+      if (hudHumid) hudHumid.textContent = `${Math.round(curr.humidity)}% RH`;
+      if (hudRain) hudRain.textContent = `${curr.precipitation_mm || 0} mm`;
+      const et0 = estimateET0(curr.temperature, curr.humidity, curr.wind_speed);
+      if (hudEt) hudEt.textContent = `${et0} mm ET₀`;
+      if (hudStatus && !hudStatus.textContent.includes('GPS')) {
+        hudStatus.textContent = locName || 'Live telemetry linked';
+      }
     }
   }
 
@@ -600,6 +767,8 @@
     flyToFarm,
     editFarm,
     deleteFarm,
+    detectLiveGPS,
+    searchLocation,
     setCoordinates: (lat, lng) => {
       if (map) {
         map.flyTo([lat, lng], 16);

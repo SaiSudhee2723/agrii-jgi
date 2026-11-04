@@ -41,3 +41,4 @@ CREATE POLICY "Users can delete their own farms"
 
 -- Index for speedy queries by user
 CREATE INDEX IF NOT EXISTS idx_farms_user_id ON public.farms(user_id);
+
