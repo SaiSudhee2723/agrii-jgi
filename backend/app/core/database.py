@@ -131,6 +131,19 @@ def init_local_database():
         created_at TEXT NOT NULL,
         PRIMARY KEY (user_id, post_id)
     );
+
+    CREATE TABLE IF NOT EXISTS farms (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        farm_name TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        boundary_coordinates TEXT,
+        area_acres REAL DEFAULT 0.0,
+        crop_type TEXT DEFAULT 'General Crop',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
     """)
 
     conn.commit()

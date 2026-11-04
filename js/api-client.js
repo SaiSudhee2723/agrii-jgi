@@ -153,6 +153,33 @@ class ApiClient {
     });
   }
 
+  // --- Module: Farm Location Intelligence & Maps ---
+  static async listFarms() {
+    return this.request('/farms', { method: 'GET' });
+  }
+
+  static async saveFarm(farmData) {
+    return this.request('/farms', {
+      method: 'POST',
+      body: JSON.stringify(farmData)
+    });
+  }
+
+  static async getFarm(farmId) {
+    return this.request(`/farms/${encodeURIComponent(farmId)}`, { method: 'GET' });
+  }
+
+  static async updateFarm(farmId, farmData) {
+    return this.request(`/farms/${encodeURIComponent(farmId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(farmData)
+    });
+  }
+
+  static async deleteFarm(farmId) {
+    return this.request(`/farms/${encodeURIComponent(farmId)}`, { method: 'DELETE' });
+  }
+
   // --- Module 5: Market Intelligence ---
   static async getMarketPrices(commodity, state, mandi) {
     const params = new URLSearchParams();

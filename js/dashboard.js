@@ -706,6 +706,10 @@
         // Automatic location auto-detection by backend IP
         data = await window.GeosenseApi.getWeather();
       }
+
+      if (window.FarmMap && data.latitude && data.longitude) {
+        window.FarmMap.setCoordinates(data.latitude, data.longitude);
+      }
       container.innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
           <div style="padding: 20px 24px; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0;">

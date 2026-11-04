@@ -931,17 +931,25 @@
     });
 
     // 5. One-Click Instant Demo Access
-    function loginDemo() {
-      window.GeosenseApi.setSession('auth-section-demo-jwt', {
-        full_name: 'Harshit Sharma',
-        email: 'harshitlog@gmail.com',
-        role: 'farmer',
-        region: 'Punjab'
-      });
-      window.location.replace('/dashboard');
+    async function loginDemo() {
+      const demoButton = document.getElementById('btn-demo-access');
+      demoButton.disabled = true;
+      try {
+        await window.GeosenseApi.loginDemo();
+        window.location.replace('/dashboard');
+      } catch (err) {
+        errorBox.style.display = 'block';
+        errorBox.textContent = err.message || 'Demo access is unavailable. Please try again.';
+        demoButton.disabled = false;
+      }
     }
 
     document.getElementById('btn-demo-access').addEventListener('click', loginDemo);
+    window.GeosenseApi.getAuthConfig().then((config) => {
+      if (!config.demo_enabled) document.getElementById('btn-demo-access').hidden = true;
+    }).catch(() => {
+      document.getElementById('btn-demo-access').hidden = true;
+    });
     const googleBtn = document.getElementById('social-google');
     if (googleBtn) {
       googleBtn.addEventListener('click', async () => {

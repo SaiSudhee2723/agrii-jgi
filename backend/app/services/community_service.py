@@ -25,7 +25,7 @@ class CommunityService:
         current_user_id: Optional[str] = None
     ) -> List[PostResponse]:
         supabase = get_supabase_client()
-        if supabase:
+        if supabase and current_user_id != "demo-farmer-id-123":
             try:
                 query = supabase.table("community_posts").select("*, profiles(full_name, avatar_url)")
                 if category and category != "all":
@@ -102,7 +102,7 @@ class CommunityService:
         now_str = datetime.utcnow().isoformat() + "Z"
         post_id = str(uuid.uuid4())
 
-        if supabase:
+        if supabase and user_id != "demo-farmer-id-123":
             try:
                 insert_data = {
                     "user_id": user_id,
