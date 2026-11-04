@@ -950,13 +950,13 @@
 
         try {
           await window.GeosenseApi.signInWithGoogle({
-            redirectTo: ${window.location.origin}/auth/callback
+            redirectTo: `${window.location.origin}/auth/callback`
           });
         } catch (err) {
           googleBtn.disabled = false;
           if (label) label.textContent = origText;
           errorBox.style.display = 'block';
-          errorBox.textContent = Google Sign-In: ;
+          errorBox.textContent = `Google Sign-In: ${err.message || 'Could not initiate Google authentication.'}`;
         }
       });
     }
