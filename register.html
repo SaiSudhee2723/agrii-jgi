@@ -306,16 +306,7 @@
         await window.GeosenseApi.registerUser({ full_name, email, password, region, phone });
 
         // Auto-login after registration
-        try {
-          await window.GeosenseApi.loginUser(email, password);
-        } catch (_) {
-          window.GeosenseApi.setSession('registered-user-token', {
-            full_name,
-            email,
-            region,
-            role: 'farmer'
-          });
-        }
+        await window.GeosenseApi.loginUser(email, password);
 
         window.location.replace('/dashboard');
       } catch (err) {

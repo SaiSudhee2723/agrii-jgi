@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.core.config import settings
+from app.core.supabase import get_supabase_client
 
 logger = logging.getLogger("geosense.security")
 security_bearer = HTTPBearer(auto_error=False)
@@ -16,6 +17,19 @@ async def get_current_user_optional(
         return None
 
     token = credentials.credentials
+    # The offline login endpoint issues this explicit development session. It
+    # is intentionally limited to the demo farmer and lets protected routes
+    # work without requiring a configured Supabase project.
+    if token == "demo-jwt-token-geosense-farmer" and get_supabase_client() is None:
+        return {
+            "sub": "demo-farmer-id-123",
+            "email": "demo@geosense.local",
+            "user_metadata": {
+                "full_name": "Demo Farmer",
+                "region": "Punjab"
+            }
+        }
+
     try:
         # If Supabase JWT Secret is configured, verify signature
         if settings.SUPABASE_JWT_SECRET and "placeholder" not in settings.SUPABASE_JWT_SECRET:

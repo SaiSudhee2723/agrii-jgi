@@ -238,7 +238,7 @@ class ApiClient {
     } catch (err) {
       console.warn('Could not fetch auth config from backend, using fallback:', err);
       return {
-        supabase_url: window.GEOSENSE_SUPABASE_URL || 'https://acnuywrigqjzjkqnohl.supabase.co',
+        supabase_url: window.GEOSENSE_SUPABASE_URL || 'https://acnuywrigqjzjkqnohll.supabase.co',
         supabase_anon_key: window.GEOSENSE_SUPABASE_ANON_KEY || 'sb_publishable_QSlMWGJGane_ZzX-5KSUww__7crR3y5',
         is_configured: false
       };
@@ -290,27 +290,6 @@ class ApiClient {
    */
   static async signInWithGoogle(options = {}) {
     try {
-      const cfg = await this.getAuthConfig();
-      const supabaseUrl = window.GEOSENSE_SUPABASE_URL || cfg.supabase_url;
-
-      // Safe preflight check: ensure Supabase host is resolvable before leaving page
-      if (supabaseUrl && !supabaseUrl.includes('placeholder')) {
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 2000);
-          await fetch(`${supabaseUrl}/auth/v1/health`, {
-            method: 'HEAD',
-            mode: 'no-cors',
-            signal: controller.signal
-          });
-          clearTimeout(timer);
-        } catch (pingErr) {
-          if (pingErr.name !== 'AbortError') {
-            throw new Error(`Cannot reach Supabase host '${supabaseUrl}'. Please verify your Supabase project URL and that the project is active.`);
-          }
-        }
-      }
-
       const supabase = await this.getSupabaseClient();
       const redirectUri = options.redirectTo || `${window.location.origin}/auth/callback`;
 

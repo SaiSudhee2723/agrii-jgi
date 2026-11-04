@@ -904,23 +904,26 @@
       const password = document.getElementById('field-password').value;
       const firstName = document.getElementById('field-first-name') ? document.getElementById('field-first-name').value.trim() : '';
       const lastName = document.getElementById('field-last-name') ? document.getElementById('field-last-name').value.trim() : '';
+      const fullName = `${firstName} ${lastName}`.trim();
 
       try {
         if (isRegisterMode) {
-          await window.GeosenseApi.registerUser(email, password, `${firstName} ${lastName}`.trim() || 'Harshit Sharma');
+          await window.GeosenseApi.registerUser({
+            full_name: fullName || 'Farmer Member',
+            email,
+            password,
+            region: 'Punjab'
+          });
+          // Registration may require email confirmation, so establish a session
+          // only after the server confirms a successful sign in.
+          await window.GeosenseApi.loginUser(email, password);
         } else {
           await window.GeosenseApi.loginUser(email, password);
         }
         window.location.replace('/dashboard');
       } catch (err) {
-        // Fallback demo session so user is never locked out during development
-        window.GeosenseApi.setSession('auth-section-demo-jwt', {
-          full_name: `${firstName} ${lastName}`.trim() || 'Harshit Sharma',
-          email: email || 'harshitlog@gmail.com',
-          role: 'farmer',
-          region: 'Punjab'
-        });
-        window.location.replace('/dashboard');
+        errorBox.style.display = 'block';
+        errorBox.textContent = err.message || 'Authentication failed. Please check your details and try again.';
       } finally {
         submitBtn.disabled = false;
         btnText.textContent = isRegisterMode ? 'Create Account' : 'Sign In';
