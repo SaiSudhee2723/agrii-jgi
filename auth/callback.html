@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authenticating - Geosense Smart Agriculture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 30%, #17325c 0%, #0b1d3a 100%);
+      color: #ffffff;
+      padding: 24px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 440px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 36px 30px;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }
+    .brand-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #2fe0d0;
+      box-shadow: 0 0 12px #2fe0d0;
+    }
+    .spinner-ring {
+      display: inline-block;
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-radius: 50%;
+      border-top-color: #2fe0d0;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .status-title {
+      font-size: 1.18rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .status-desc {
+      font-size: 0.90rem;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    .error-box {
+      display: none;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 0.86rem;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    .btn-return {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 20px;
+      background: #ffffff;
+      color: #0b1d3a;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    .btn-return:hover {
+      background: #f1f5f9;
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="brand">
+      <span class="brand-dot"></span> Geosense AI
+    </div>
+
+    <div id="loading-state">
+      <div class="spinner-ring"></div>
+      <h2 class="status-title" id="status-title">Verifying Google Session...</h2>
+      <p class="status-desc" id="status-desc">Establishing secure connection with Supabase Auth and loading your farm profile.</p>
+    </div>
+
+    <div id="error-box" class="error-box">
+      <strong>Authentication Notice:</strong>
+      <div id="error-message" style="margin-top: 4px;"></div>
+    </div>
+
+    <div id="action-state" style="display: none;">
+      <a href="/login" class="btn-return" id="btn-return">
+        Return to Login
+      </a>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/js/api-client.js"></script>
+  <script>
+    (async function handleAuthCallback() {
+      const statusTitle = document.getElementById('status-title');
+      const statusDesc = document.getElementById('status-desc');
+      const errorBox = document.getElementById('error-box');
+      const errorMessage = document.getElementById('error-message');
+      const actionState = document.getElementById('action-state');
+      const loadingState = document.getElementById('loading-state');
+
+      function showError(title, msg) {
+        if (loadingState) loadingState.querySelector('.spinner-ring').style.display = 'none';
+        statusTitle.textContent = title;
+        statusTitle.style.color = '#f87171';
+        statusDesc.style.display = 'none';
+        errorBox.style.display = 'block';
+        errorMessage.textContent = msg;
+        actionState.style.display = 'block';
+      }
+
+      try {
+        // 1. Check for URL error parameters (e.g. user cancelled Google OAuth consent)
+        const urlParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+
+        const oauthError = urlParams.get('error') || hashParams.get('error');
+        const oauthErrorDesc = urlParams.get('error_description') || hashParams.get('error_description');
+
+        if (oauthError) {
+          if (oauthError === 'access_denied') {
+            showError('Sign-In Cancelled', 'You cancelled the Google sign-in process. You can try again whenever you are ready.');
+          } else {
+            showError('Authentication Error', oauthErrorDesc || `Google sign-in returned error: ${oauthError}`);
+          }
+          return;
+        }
+
+        // 2. Initialize Supabase Client
+        let supabase;
+        try {
+          supabase = await window.GeosenseApi.getSupabaseClient();
+        } catch (initErr) {
+          showError('Configuration Required', initErr.message || 'Supabase is not configured.');
+          return;
+        }
+
+        // 3. Process Code Exchange or Hash Session
+        statusTitle.textContent = 'Synchronizing Farmer Profile...';
+        
+        // Check if an auth code was returned in query params (?code=...)
+        const code = urlParams.get('code');
+        let session = null;
+
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          session = data.session;
+        } else {
+          // Check for existing/stored session or hash tokens
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          session = data.session;
+        }
+
+        // If no session found in query or storage, wait for onAuthStateChange
+        if (!session) {
+          session = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Authentication session timed out or no valid Google credentials received.'));
+            }, 6000);
+
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+              if (s) {
+                clearTimeout(timeout);
+                subscription.unsubscribe();
+                resolve(s);
+              }
+            });
+          });
+        }
+
+        if (!session || !session.access_token) {
+          showError('Session Missing', 'Could not retrieve an authenticated Google session from Supabase.');
+          return;
+        }
+
+        // 4. Retrieve User Details
+        const user = session.user;
+        const meta = user.user_metadata || {};
+        const fullName = meta.full_name || meta.name || user.email.split('@')[0];
+        const avatarUrl = meta.avatar_url || meta.picture || null;
+
+        // 5. Save Authenticated Session in Geosense LocalStorage
+        window.GeosenseApi.setSession(session.access_token, {
+          id: user.id,
+          email: user.email,
+          full_name: fullName,
+          avatar_url: avatarUrl,
+          provider: 'google'
+        });
+
+        // 6. Synchronize Profile with Backend / Profiles Table (Creates or Updates)
+        try {
+          await window.GeosenseApi.syncProfile({
+            full_name: fullName,
+            avatar_url: avatarUrl
+          });
+        } catch (syncErr) {
+          console.warn('Profile sync notice:', syncErr);
+        }
+
+        // 7. Successful Authentication -> Redirect to Dashboard
+        statusTitle.textContent = 'Success! Redirecting...';
+        statusDesc.textContent = 'Welcome back to Geosense Smart Agriculture.';
+        setTimeout(() => {
+          window.location.replace('/dashboard');
+        }, 600);
+
+      } catch (err) {
+        console.error('Callback error:', err);
+        showError('Sign-In Unsuccessful', err.message || 'An unexpected error occurred during Google authentication.');
+      }
+    })();
+  </script>
+</body>
+</html>

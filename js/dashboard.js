@@ -40,11 +40,19 @@
     const name = currentUser?.full_name || currentUser?.user_metadata?.full_name || 'Farmer Member';
     const email = currentUser?.email || 'farmer@geosense.org';
     const region = currentUser?.region || currentUser?.user_metadata?.region || 'Punjab';
+    const avatarUrl = currentUser?.avatar_url || currentUser?.user_metadata?.avatar_url || currentUser?.user_metadata?.picture;
 
     document.querySelectorAll('.user-name-display').forEach(el => el.textContent = name);
     document.querySelectorAll('.user-email-display').forEach(el => el.textContent = email);
     document.querySelectorAll('.user-region-display').forEach(el => el.textContent = `Farm: ${region}`);
-    document.querySelectorAll('.user-avatar-initial').forEach(el => el.textContent = name.charAt(0).toUpperCase());
+    
+    document.querySelectorAll('.user-avatar-initial').forEach(el => {
+      if (avatarUrl) {
+        el.innerHTML = `<img src="${avatarUrl}" alt="${name}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" referrerpolicy="no-referrer" />`;
+      } else {
+        el.textContent = name.charAt(0).toUpperCase();
+      }
+    });
   }
 
   function bindSidebarNavigation() {

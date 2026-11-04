@@ -818,6 +818,7 @@
     </div>
   </section>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/api-client.js"></script>
   <script>
     // 1. Redirect if already authenticated
@@ -938,8 +939,35 @@
     }
 
     document.getElementById('btn-demo-access').addEventListener('click', loginDemo);
-    document.getElementById('social-google').addEventListener('click', loginDemo);
-    document.getElementById('social-apple').addEventListener('click', loginDemo);
+    const googleBtn = document.getElementById('social-google');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', async () => {
+        errorBox.style.display = 'none';
+        const label = document.getElementById('label-google');
+        const origText = label ? label.textContent : 'Google';
+        if (label) label.textContent = 'Redirecting...';
+        googleBtn.disabled = true;
+
+        try {
+          await window.GeosenseApi.signInWithGoogle({
+            redirectTo: ${window.location.origin}/auth/callback
+          });
+        } catch (err) {
+          googleBtn.disabled = false;
+          if (label) label.textContent = origText;
+          errorBox.style.display = 'block';
+          errorBox.textContent = Google Sign-In: ;
+        }
+      });
+    }
+
+    const appleBtn = document.getElementById('social-apple');
+    if (appleBtn) {
+      appleBtn.addEventListener('click', () => {
+        errorBox.style.display = 'block';
+        errorBox.textContent = 'Apple Sign-In is coming soon. Please use Google or Email to sign in.';
+      });
+    }
 
     // 6. Canvas Shader matching Hero Halden Atmosphere Palette:
     // Midnight navy base (#0e1f3d) + Glowing Periwinkle (#5b7cf0) + Cyan Turquoise (#2fe0d0)

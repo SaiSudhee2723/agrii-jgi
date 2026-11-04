@@ -1,6 +1,6 @@
 /**
  * Geosense API Client
- * Reusable fetch wrapper for FastAPI backend endpoints.
+ * Reusable fetch wrapper for FastAPI backend endpoints & Supabase Auth.
  * Never exposes service-role keys; uses standard JWT Bearer tokens and anon keys.
  */
 
@@ -23,6 +23,11 @@ class ApiClient {
   static clearSession() {
     localStorage.removeItem(API_CONFIG.AUTH_TOKEN_KEY);
     localStorage.removeItem(API_CONFIG.USER_DATA_KEY);
+    if (window._supabaseInstance && window._supabaseInstance.auth) {
+      try {
+        window._supabaseInstance.auth.signOut();
+      } catch (_) {}
+    }
   }
 
   static getUser() {
@@ -219,8 +224,100 @@ class ApiClient {
       method: 'GET'
     });
   }
+
+  static async syncProfile(profileData = {}) {
+    return this.request('/auth/sync-profile', {
+      method: 'POST',
+      body: JSON.stringify(profileData)
+    });
+  }
+
+  static async getAuthConfig() {
+    try {
+      return await this.request('/auth/config', { method: 'GET' });
+    } catch (err) {
+      console.warn('Could not fetch auth config from backend, using fallback:', err);
+      return {
+        supabase_url: window.GEOSENSE_SUPABASE_URL || 'https://acnuywrigqjzjkqnohl.supabase.co',
+        supabase_anon_key: window.GEOSENSE_SUPABASE_ANON_KEY || 'sb_publishable_QSlMWGJGane_ZzX-5KSUww__7crR3y5',
+        is_configured: false
+      };
+    }
+  }
+
+  /**
+   * Initializes or returns the Supabase JS Client using safe public credentials.
+   */
+  static async getSupabaseClient() {
+    if (window._supabaseInstance) {
+      return window._supabaseInstance;
+    }
+
+    const cfg = await this.getAuthConfig();
+    const supabaseUrl = window.GEOSENSE_SUPABASE_URL || cfg.supabase_url;
+    const supabaseAnonKey = window.GEOSENSE_SUPABASE_ANON_KEY || cfg.supabase_anon_key;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase project URL and anon key are not configured.');
+    }
+
+    // Load Supabase JS from CDN if not already loaded on window
+    if (!window.supabase) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Failed to load Supabase JS library from CDN.'));
+        document.head.appendChild(script);
+      });
+    }
+
+    window._supabaseInstance = window.supabase.createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage
+      }
+    });
+
+    return window._supabaseInstance;
+  }
+
+  /**
+   * Initiates Google OAuth Sign-In via Supabase.
+   * Redirects user to Google's official consent screen.
+   */
+  static async signInWithGoogle(options = {}) {
+    try {
+      const supabase = await this.getSupabaseClient();
+      const redirectUri = options.redirectTo || `${window.location.origin}/auth/callback`;
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUri,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent'
+          }
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data && data.url) {
+        window.location.href = data.url;
+      }
+      return data;
+    } catch (err) {
+      console.error('Google Sign-In Error:', err);
+      throw err;
+    }
+  }
 }
 
 // Expose globally
 window.GeosenseApi = ApiClient;
-
