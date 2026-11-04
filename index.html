@@ -390,16 +390,21 @@
 
     #stmt {
       position: absolute;
-      top: 48vh;
+      top: 35vh;
       left: 0;
       right: 0;
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 clamp(16px, 4vw, 40px);
+      box-sizing: border-box;
       text-align: center;
       font-weight: 400;
-      font-size: clamp(20px, 2.8vw, 42px);
-      line-height: 1.16;
-      letter-spacing: -.03em;
+      font-size: clamp(20px, 2.35vw, 38px);
+      line-height: 1.25;
+      letter-spacing: -.025em;
       color: var(--ink);
-      white-space: nowrap;
+      white-space: normal;
       will-change: transform;
     }
 
@@ -744,10 +749,11 @@
       }
 
       #stmt {
-        top: 48vh;
+        top: 32vh;
         white-space: normal;
-        font-size: 23px;
-        max-width: 15em;
+        font-size: clamp(18px, 5.2vw, 24px);
+        line-height: 1.35;
+        max-width: 90vw;
         margin: 0 auto;
         padding: 0 16px;
       }
@@ -902,7 +908,7 @@
     <!-- Scene 2: Statement (pinned) -->
     <section class="statement" id="statement">
       <div class="pin">
-        <p id="stmt">Geo is an AI agronomist<br> that analyzes soil health, predicts optimum crops,<br> calculates precision irrigation, tracks mandi prices,<br> and guides farmers every step from seed to harvest</p>
+        <p id="stmt">Geo is an AI agronomist<br>that analyzes soil health, predicts optimum crops,<br>calculates precision irrigation, tracks mandi prices,<br>and guides farmers every step from seed to harvest</p>
       </div>
     </section>
 
