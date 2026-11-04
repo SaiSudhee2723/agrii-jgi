@@ -23,7 +23,7 @@ async def get_current_user_optional(
             "email": "demo@geosense.local",
             "user_metadata": {
                 "full_name": "Demo Farmer",
-                "region": "Punjab"
+                "region": "Karnataka"
             }
         }
 

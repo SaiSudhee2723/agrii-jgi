@@ -460,10 +460,21 @@
             <div>
               <h3 class="panel-title">Live Agro-Meteorological Telemetry</h3>
               <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">
-                Real-time weather parameters and automated agricultural alerts from Open-Meteo.
+                High-precision real-time conditions, satellite agro-telemetry, and multi-day agricultural forecast.
               </p>
             </div>
-            <span class="data-source-badge live">Live Open-Meteo API</span>
+            <span class="data-source-badge live" id="badge-weather-source">OpenWeatherMap Live</span>
+          </div>
+
+          <!-- Location Selector & GPS Bar -->
+          <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: #f8fafc; padding: 12px 16px; border-radius: 10px; border: 1px solid #e2e8f0;">
+            <div style="position: relative; flex: 1; min-width: 220px;">
+              <input type="text" id="weather-search-input" placeholder="Search any city, district or village (e.g., Bengaluru, Mandya, Pune, Delhi)..." style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; outline: none; box-sizing: border-box;" />
+            </div>
+            <button id="btn-weather-search" class="btn-geo-primary" style="padding: 9px 16px; font-size: 0.88rem; border-radius: 8px;">Search Location</button>
+            <button id="btn-weather-gps" type="button" style="padding: 9px 14px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: #0b1d3a; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <span>📍 Detect My Live GPS</span>
+            </button>
           </div>
 
           <div id="dash-weather-container">

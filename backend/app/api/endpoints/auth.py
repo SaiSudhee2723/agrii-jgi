@@ -23,7 +23,25 @@ async def get_auth_config():
     return {
         "supabase_url": settings.SUPABASE_URL,
         "supabase_anon_key": settings.SUPABASE_ANON_KEY,
-        "is_configured": is_live
+        "is_configured": is_live,
+        "demo_enabled": settings.DEBUG
+    }
+
+@router.post("/demo", summary="Start a development-only demo session")
+async def demo_login():
+    """Create the single seeded demo identity for local development and previews."""
+    if not settings.DEBUG:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo access is disabled.")
+    return {
+        "access_token": "demo-jwt-token-geosense-farmer",
+        "token_type": "bearer",
+        "user": {
+            "id": "demo-farmer-id-123",
+            "email": "demo@geosense.local",
+            "full_name": "Demo Farmer",
+            "region": "Karnataka",
+            "role": "farmer"
+        }
     }
 
 @router.post("/register", summary="Register new farmer account via Supabase Auth")

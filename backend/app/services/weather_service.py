@@ -14,17 +14,85 @@ class WeatherService:
     OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
     OPENWEATHER_FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
     OPENWEATHER_GEO_URL = "https://api.openweathermap.org/geo/1.0/reverse"
+    OPENWEATHER_DIRECT_GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
     OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+
+    @classmethod
+    async def _auto_detect_ip_location(cls) -> Optional[tuple[float, float, str]]:
+        """Resolves the user's real physical city & coordinates via IP geolocation."""
+        try:
+            async with httpx.AsyncClient(timeout=3.5) as client:
+                res = await client.get("http://ip-api.com/json/")
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("status") == "success":
+                        lat = float(data.get("lat"))
+                        lon = float(data.get("lon"))
+                        city = data.get("city", "")
+                        region = data.get("regionName", "")
+                        loc_str = f"{city}, {region}".strip(", ")
+                        return lat, lon, loc_str
+        except Exception as e:
+            logger.info(f"IP geolocate notice: {e}")
+        return None
+
+    @classmethod
+    async def _geocode_query(cls, query: str, api_key: str) -> Optional[tuple[float, float, str]]:
+        """Resolves city, district or village name to lat/lon using OpenWeather geocoding."""
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                res = await client.get(
+                    cls.OPENWEATHER_DIRECT_GEO_URL,
+                    params={"q": query, "limit": 1, "appid": api_key}
+                )
+                if res.status_code == 200 and len(res.json()) > 0:
+                    g = res.json()[0]
+                    lat = float(g.get("lat"))
+                    lon = float(g.get("lon"))
+                    name = g.get("name", query)
+                    state = g.get("state", g.get("country", ""))
+                    loc_name = f"{name}, {state}".strip(", ")
+                    return lat, lon, loc_name
+        except Exception as e:
+            logger.warning(f"Geocoding error for '{query}': {e}")
+        return None
 
     @classmethod
     async def get_weather(
         cls,
-        latitude: float = 20.5937,
-        longitude: float = 78.9629,
-        location_name: str = "Regional Farm"
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        location_name: Optional[str] = None,
+        location_query: Optional[str] = None
     ) -> WeatherResponse:
-        # 1. Try OpenWeatherMap first if API key configured
         api_key = getattr(settings, "OPENWEATHER_API_KEY", "").strip()
+
+        # 1. If explicit search query provided (e.g. "Bengaluru" or "Mandya")
+        if location_query and location_query.strip():
+            if api_key:
+                geo = await cls._geocode_query(location_query.strip(), api_key)
+                if geo:
+                    latitude, longitude, location_name = geo
+
+        # 2. If coordinates not provided or at dummy default, auto-detect from user's IP
+        is_default_coords = (
+            latitude is not None and longitude is not None and
+            abs(latitude - 20.5937) < 0.001 and abs(longitude - 78.9629) < 0.001
+        )
+        if latitude is None or longitude is None or is_default_coords:
+            ip_geo = await cls._auto_detect_ip_location()
+            if ip_geo:
+                latitude, longitude, location_name = ip_geo
+
+        # Default fallback coordinates (Bengaluru, Karnataka)
+        if latitude is None or longitude is None:
+            latitude = 12.9753
+            longitude = 77.5910
+            location_name = location_name or "Bengaluru, Karnataka"
+
+        location_name = location_name or "Local Farm"
+
+        # 3. Try OpenWeatherMap with resolved coordinates
         if api_key:
             try:
                 ow_resp = await cls._fetch_openweathermap(latitude, longitude, location_name, api_key)
@@ -33,7 +101,7 @@ class WeatherService:
             except Exception as e:
                 logger.warning(f"OpenWeatherMap request failed: {e}. Falling back to Open-Meteo.")
 
-        # 2. Try Open-Meteo high-resolution agro-meteorology
+        # 4. Fallback to Open-Meteo high-resolution agro-meteorology
         try:
             return await cls._fetch_open_meteo(latitude, longitude, location_name)
         except Exception as e:
@@ -152,7 +220,6 @@ class WeatherService:
                 ))
 
         if not forecast_list:
-            # Fallback 1 day
             forecast_list.append(ForecastDay(
                 date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 temp_max=temp,

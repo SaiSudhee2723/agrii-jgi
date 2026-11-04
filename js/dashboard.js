@@ -642,49 +642,70 @@
   // --------------------------------------------------------------------------
   // MODULE 5: WEATHER INTELLIGENCE (LIVE OPEN-METEO TELEMETRY)
   // --------------------------------------------------------------------------
-  function bindWeatherModule() {}
+  function bindWeatherModule() {
+    const searchBtn = document.getElementById('btn-weather-search');
+    const searchInput = document.getElementById('weather-search-input');
+    const gpsBtn = document.getElementById('btn-weather-gps');
 
-  async function loadWeatherModuleData() {
+    if (searchBtn && searchInput) {
+      searchBtn.addEventListener('click', () => {
+        const q = searchInput.value.trim();
+        if (q) loadWeatherModuleData(q);
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const q = searchInput.value.trim();
+          if (q) loadWeatherModuleData(q);
+        }
+      });
+    }
+
+    if (gpsBtn) {
+      gpsBtn.addEventListener('click', () => {
+        gpsBtn.disabled = true;
+        gpsBtn.innerHTML = '<span>⏳ Acquiring GPS...</span>';
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              gpsBtn.disabled = false;
+              gpsBtn.innerHTML = '<span>📍 Detect My Live GPS</span>';
+              const coords = {
+                lat: parseFloat(pos.coords.latitude.toFixed(4)),
+                lon: parseFloat(pos.coords.longitude.toFixed(4)),
+                name: 'My Farm Location'
+              };
+              loadWeatherModuleData(null, coords);
+            },
+            (err) => {
+              gpsBtn.disabled = false;
+              gpsBtn.innerHTML = '<span>📍 Detect My Live GPS</span>';
+              alert('Could not access GPS (' + (err.message || 'Permission denied') + '). Showing auto-detected regional city.');
+            },
+            { timeout: 7000, enableHighAccuracy: true }
+          );
+        } else {
+          gpsBtn.disabled = false;
+          gpsBtn.innerHTML = '<span>📍 Detect My Live GPS</span>';
+          alert('Geolocation is not supported by your browser.');
+        }
+      });
+    }
+  }
+
+  async function loadWeatherModuleData(query = null, overrideCoords = null) {
     const container = document.getElementById('dash-weather-container');
-    container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748b;">Querying weather telemetry...</div>';
+    container.innerHTML = '<div style="padding: 24px; text-align: center; color: #64748b;">Querying live agro-telemetry...</div>';
 
     try {
-      const regionCoords = {
-        'punjab': { lat: 30.9010, lon: 75.8573, name: 'Ludhiana, Punjab' },
-        'haryana': { lat: 29.0588, lon: 76.0856, name: 'Hisar, Haryana' },
-        'uttar pradesh': { lat: 26.8467, lon: 80.9462, name: 'Lucknow, Uttar Pradesh' },
-        'maharashtra': { lat: 19.7515, lon: 75.7139, name: 'Aurangabad, Maharashtra' },
-        'karnataka': { lat: 15.3173, lon: 75.7139, name: 'Hubli, Karnataka' },
-        'gujarat': { lat: 22.2587, lon: 71.1924, name: 'Rajkot, Gujarat' },
-        'madhya pradesh': { lat: 22.9734, lon: 78.6569, name: 'Bhopal, Madhya Pradesh' },
-        'rajasthan': { lat: 26.9124, lon: 75.7873, name: 'Jaipur, Rajasthan' },
-        'tamil nadu': { lat: 11.1271, lon: 78.6569, name: 'Coimbatore, Tamil Nadu' },
-        'andhra pradesh': { lat: 15.9129, lon: 79.7400, name: 'Guntur, Andhra Pradesh' },
-        'telangana': { lat: 17.3850, lon: 78.4867, name: 'Hyderabad, Telangana' }
-      };
-
-      const user = window.GeosenseApi ? window.GeosenseApi.getUser() : null;
-      const userRegKey = (user && user.region ? user.region.toLowerCase().trim() : 'punjab');
-      let target = regionCoords[userRegKey] || { lat: 30.9010, lon: 75.8573, name: 'Punjab, India' };
-
-      if (navigator.geolocation && !window._geoDenied) {
-        try {
-          const pos = await new Promise((res, rej) => {
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, maximumAge: 300000 });
-          });
-          if (pos && pos.coords) {
-            target = {
-              lat: parseFloat(pos.coords.latitude.toFixed(4)),
-              lon: parseFloat(pos.coords.longitude.toFixed(4)),
-              name: 'My Farm Location'
-            };
-          }
-        } catch (_) {
-          window._geoDenied = true;
-        }
+      let data;
+      if (overrideCoords) {
+        data = await window.GeosenseApi.getWeather(overrideCoords.lat, overrideCoords.lon, overrideCoords.name);
+      } else if (query) {
+        data = await window.GeosenseApi.getWeather(null, null, '', query);
+      } else {
+        // Automatic location auto-detection by backend IP
+        data = await window.GeosenseApi.getWeather();
       }
-
-      const data = await window.GeosenseApi.getWeather(target.lat, target.lon, target.name);
       container.innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
           <div style="padding: 20px 24px; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0;">

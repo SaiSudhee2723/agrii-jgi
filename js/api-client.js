@@ -140,9 +140,15 @@ class ApiClient {
   }
 
   // --- Module 4: Weather Intelligence ---
-  static async getWeather(lat = 20.5937, lon = 78.9629, locationName = 'Farm Location') {
-    const params = new URLSearchParams({ lat, lon, location_name: locationName });
-    return this.request(`/weather/current?${params.toString()}`, {
+  static async getWeather(lat = null, lon = null, locationName = '', q = '') {
+    const params = new URLSearchParams();
+    if (lat !== null && lat !== undefined) params.append('lat', lat);
+    if (lon !== null && lon !== undefined) params.append('lon', lon);
+    if (locationName) params.append('location_name', locationName);
+    if (q) params.append('q', q);
+    const queryString = params.toString();
+    const endpoint = queryString ? `/weather/current?${queryString}` : '/weather/current';
+    return this.request(endpoint, {
       method: 'GET'
     });
   }
@@ -216,6 +222,12 @@ class ApiClient {
     if (result.access_token) {
       this.setSession(result.access_token, result.user);
     }
+    return result;
+  }
+
+  static async loginDemo() {
+    const result = await this.request('/auth/demo', { method: 'POST' });
+    if (result.access_token) this.setSession(result.access_token, result.user);
     return result;
   }
 
