@@ -422,8 +422,9 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      padding-top: clamp(84px, 12vh, 116px);
+      justify-content: center;
+      padding-top: clamp(80px, 10vh, 110px);
+      padding-bottom: 30px;
       box-sizing: border-box;
     }
 
@@ -942,6 +943,20 @@
 
       .hero .cta-wrap {
         bottom: 6vh;
+      }
+
+      .statement {
+        height: auto;
+        min-height: 100vh;
+        margin-top: 0;
+      }
+
+      .pin {
+        height: auto;
+        min-height: 100vh;
+        justify-content: flex-start;
+        padding-top: 80px;
+        padding-bottom: 40px;
       }
 
       #stmt {
@@ -1637,7 +1652,7 @@
       // Synchronized Statement & Telemetry Deck rise & reveal:
       // Starts immediately as hero logos pass, settling between q = 0.25 and q = 0.95
       const s = clamp((q - 0.25) / 0.70);
-      const translateY = 20 * Math.pow(1 - s, 2);
+      const translateY = -40 * Math.pow(1 - s, 2);
       stmtEl.style.transform = `translateY(${translateY.toFixed(2)}px)`;
 
       const pStmt = s;
@@ -1648,7 +1663,7 @@
       if (deckEl) {
         const deckP = clamp((s - 0.15) / 0.55);
         deckEl.style.opacity = (0.2 + 0.8 * deckP).toFixed(3);
-        deckEl.style.transform = `translateY(${(14 * (1 - deckP)).toFixed(2)}px)`;
+        deckEl.style.transform = `translateY(${(-25 * (1 - deckP)).toFixed(2)}px)`;
       }
 
       // Nav CTA: #nav.on toggled when p > .35
