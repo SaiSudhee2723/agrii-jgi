@@ -10,6 +10,7 @@ router = APIRouter()
 
 class ChatQueryRequest(BaseModel):
     message: str = Field(..., min_length=2, max_length=1000, description="Farmer agronomy question")
+    language: Optional[str] = Field("en", description="Farmer selected language code ('en', 'hi', 'kn')")
 
 @router.post("/chat", summary="Consult the AI Agronomy Assistant with genuine farm context")
 async def chat_with_assistant(
@@ -31,7 +32,8 @@ async def chat_with_assistant(
         response = await AssistantService.generate_response(
             question=payload.message,
             user_id=user_id,
-            user_profile=user_profile
+            user_profile=user_profile,
+            language=payload.language or "en"
         )
         return response
     except Exception as e:

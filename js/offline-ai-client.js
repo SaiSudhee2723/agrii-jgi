@@ -288,7 +288,8 @@
         if (!window.GeosenseApi || !window.GeosenseApi.chatWithAssistant) {
           throw new Error('GeosenseApi cloud backend client is unavailable.');
         }
-        const res = await window.GeosenseApi.chatWithAssistant(q);
+        const lang = context.language || (window.GeosenseI18n ? window.GeosenseI18n.getLanguage() : 'en');
+        const res = await window.GeosenseApi.chatWithAssistant(q, lang);
         return {
           answer: res.answer,
           contextUsed: res.context_used || [],

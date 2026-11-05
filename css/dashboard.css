@@ -25,7 +25,7 @@
 }
 
 body {
-  font-family: 'Inter Tight', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter Tight', 'Noto Sans Kannada', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
   min-height: 100vh;
@@ -674,6 +674,52 @@ body {
   border-radius: 4px;
   margin-top: 6px;
 }
+
+/* ============================================================================
+   LANGUAGE SELECTOR & LOCALIZATION SETTINGS
+   ============================================================================ */
+.lang-selector-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.lang-selector-wrap:hover {
+  border-color: #94a3b8;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.lang-select-dropdown {
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.84rem;
+  color: #0f172a;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  padding-right: 4px;
+}
+
+.lang-card-option {
+  background: #ffffff;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.lang-card-option:hover {
+  border-color: #3b82f6 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+}
+
 
 
 

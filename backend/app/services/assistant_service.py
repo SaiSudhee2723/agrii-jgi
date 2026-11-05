@@ -14,7 +14,8 @@ class AssistantService:
         cls,
         question: str,
         user_id: str = "anonymous",
-        user_profile: Optional[Dict[str, Any]] = None
+        user_profile: Optional[Dict[str, Any]] = None,
+        language: str = "en"
     ) -> Dict[str, Any]:
         # 1. Fetch real context from user records
         conn = get_sqlite_conn()
@@ -69,23 +70,52 @@ class AssistantService:
         reply_parts = []
 
         # A. GREETINGS & CASUAL CONVERSATION ("hi", "hello", "hey", "who are you", etc.)
-        greeting_words = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "namaste", "hola", "who are you", "what can you do", "help"]
+        greeting_words = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "namaste", "namaskara", "hola", "who are you", "what can you do", "help"]
         is_greeting = any(q_lower == w or q_lower.startswith(w + " ") or q_lower.endswith(" " + w) for w in greeting_words)
 
         if is_greeting and len(q_lower.split()) <= 4:
-            reply_parts.append(
-                f"Hello {farmer_name}! Welcome to Geosense AI Agronomy Assistant. I am here to help you optimize yields, maintain soil fertility, and make data-driven decisions for your farm.\n\n"
-                f"📊 **Your Farm's Active Telemetry & Records:**\n"
-                f"• **Active Crop:** {crop_name}\n"
-                f"• **Soil Health Profile:** {soil_summary}\n"
-                f"• **Current Microclimate:** {weather_summary}\n\n"
-                f"How can I assist your field operations today? You can ask me:\n"
-                f"1. **Fertilizer & NPK Dosage:** *'How much urea should I apply for {crop_name}?'*\n"
-                f"2. **Irrigation Schedule:** *'How much water does my field need today?'*\n"
-                f"3. **Pest & Disease Diagnosis:** *'Why are my crop leaves turning yellow?'*\n"
-                f"4. **Crop Recommendations:** *'What alternative crops suit my soil?'*\n"
-                f"5. **Market Prices:** *'What are the latest mandi prices for {crop_name}?'*"
-            )
+            if language == "kn":
+                reply_parts.append(
+                    f"ನಮಸ್ಕಾರ {farmer_name}! ಜಿಯೋಸೆನ್ಸ್ AI ಕೃಷಿ ಸಹಾಯಕ್ಕೆ ಸ್ವಾಗತ. ನಿಮ್ಮ ಜಮೀನಿನ ಇಳುವರಿ ಹೆಚ್ಚಿಸಲು, ಮಣ್ಣಿನ ಫಲವತ್ತತೆ ಕಾಪಾಡಲು ಮತ್ತು ಉತ್ತಮ ನಿರ್ಧಾರಗಳನ್ನು ತೆಗೆದುಕೊಳ್ಳಲು ನಾನು ಇಲ್ಲಿದ್ದೇನೆ.\n\n"
+                    f"📊 **ನಿಮ್ಮ ಜಮೀನಿನ ಸಕ್ರಿಯ ಮಾಹಿತಿ:**\n"
+                    f"• **ಶಿಫಾರಸು ಮಾಡಿದ ಬೆಳೆ:** {crop_name}\n"
+                    f"• **ಮಣ್ಣಿನ ಆರೋಗ್ಯ ವಿವರ:** {soil_summary}\n"
+                    f"• **ಪ್ರಸ್ತುತ ಹವಾಮಾನ:** {weather_summary}\n\n"
+                    f"ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ? ನೀವು ಕೇಳಬಹುದು:\n"
+                    f"1. **ರಸಗೊಬ್ಬರ ಪ್ರಮಾಣ:** *'{crop_name} ಬೆಳೆಗೆ ಎಷ್ಟು ಯೂರಿಯಾ ಹಾಕಬೇಕು?'*\n"
+                    f"2. **ನೀರಾವರಿ ವೇಳಾಪಟ್ಟಿ:** *'ಇಂದು ನನ್ನ ಹೊಲಕ್ಕೆ ಎಷ್ಟು ನೀರು ಬೇಕು?'*\n"
+                    f"3. **ರೋಗ & ಕೀಟ ನಿರ್ವಹಣೆ:** *'ಎಲೆಗಳು ಹಳದಿಯಾಗುತ್ತಿವೆ, ಏನು ಮಾಡಬೇಕು?'*\n"
+                    f"4. **ಬೆಳೆ ಮಾಹಿತಿ:** *'ನನ್ನ ಮಣ್ಣಿಗೆ ಯಾವ ಬೆಳೆ ಸೂಕ್ತ?'*\n"
+                    f"5. **ಮಾರುಕಟ್ಟೆ ದರ:** *'{crop_name} ಇಂದಿನ ಮಂಡಿ ಬೆಲೆ ಎಷ್ಟು?'*"
+                )
+            elif language == "hi":
+                reply_parts.append(
+                    f"नमस्ते {farmer_name}! जियोसेंस AI कृषि सहायक में आपका स्वागत है। मैं आपकी फसल की पैदावार बढ़ाने, मिट्टी की उर्वरता बनाए रखने और वैज्ञानिक निर्णय लेने में सहायता के लिए उपस्थित हूँ।\n\n"
+                    f"📊 **आपके खेत का सक्रिय विवरण:**\n"
+                    f"• **सक्रिय अनुशंसित फसल:** {crop_name}\n"
+                    f"• **मृदा स्वास्थ्य प्रोफाइल:** {soil_summary}\n"
+                    f"• **वर्तमान मौसम:** {weather_summary}\n\n"
+                    f"आज मैं आपकी क्या सहायता कर सकता हूँ? आप पूछ सकते हैं:\n"
+                    f"1. **उर्वरक एवं खाद मात्रा:** *'{crop_name} के लिए कितना यूरिया डालना चाहिए?'*\n"
+                    f"2. **सिंचाई आवश्यकता:** *'आज मेरे खेत को कितने लीटर पानी चाहिए?'*\n"
+                    f"3. **रोग एवं कीट निदान:** *'फसल की पत्तियां पीली क्यों पड़ रही हैं?'*\n"
+                    f"4. **फसल अनुशंसा:** *'मेरी मिट्टी के लिए कौन सी फसल श्रेष्ठ है?'*\n"
+                    f"5. **मंडी भाव:** *'{crop_name} का आज का बाज़ार भाव क्या है?'*"
+                )
+            else:
+                reply_parts.append(
+                    f"Hello {farmer_name}! Welcome to Geosense AI Agronomy Assistant. I am here to help you optimize yields, maintain soil fertility, and make data-driven decisions for your farm.\n\n"
+                    f"📊 **Your Farm's Active Telemetry & Records:**\n"
+                    f"• **Active Crop:** {crop_name}\n"
+                    f"• **Soil Health Profile:** {soil_summary}\n"
+                    f"• **Current Microclimate:** {weather_summary}\n\n"
+                    f"How can I assist your field operations today? You can ask me:\n"
+                    f"1. **Fertilizer & NPK Dosage:** *'How much urea should I apply for {crop_name}?'*\n"
+                    f"2. **Irrigation Schedule:** *'How much water does my field need today?'*\n"
+                    f"3. **Pest & Disease Diagnosis:** *'Why are my crop leaves turning yellow?'*\n"
+                    f"4. **Crop Recommendations:** *'What alternative crops suit my soil?'*\n"
+                    f"5. **Market Prices:** *'What are the latest mandi prices for {crop_name}?'*"
+                )
 
         # B. CHLOROSIS / YELLOW LEAVES / LEAF ISSUES
         elif any(k in q_lower for k in ["yellow", "chlorosis", "pale leaf", "leaves turning", "brown spot", "drying leaves"]):
@@ -182,10 +212,15 @@ class AssistantService:
                 f"3. **Next Steps:** You can query me specifically about leaf yellowing diagnostics, exact urea/DAP split calculations, irrigation volume in liters, or pest control measures."
             )
 
-        disclaimer = (
-            "NOTICE: Geo AI advisory is an agronomic decision-support tool based on verified data and scientific reference principles. "
-            "For large-scale chemical applications or emergency disease outbreaks, always consult your local certified agricultural extension officer (KVK) or university agronomist."
-        )
+        if language == "kn":
+            disclaimer = "ಸೂಚನೆ: ಜಿಯೋ AI ಸಲಹೆಯು ದೃಢೀಕರಿಸಿದ ಕೃಷಿ ಮಾಹಿತಿ ಮತ್ತು ತತ್ವಗಳ ಆಧಾರಿತ ನಿರ್ಧಾರ ಸಹಾಯಕ ಸಾಧನವಾಗಿದೆ. ತುರ್ತು ರೋಗ ಅಥವಾ ದೊಡ್ಡ ಪ್ರಮಾಣದ ಕೀಟನಾಶಕ ಸಿಂಪಡಣೆಗೆ ನಿಮ್ಮ ಸ್ಥಳೀಯ ಕೃಷಿ ವಿಜ್ಞಾನ ಕೇಂದ್ರ (KVK) ಅಧಿಕಾರಿಗಳನ್ನು ಸಂಪರ್ಕಿಸಿ."
+        elif language == "hi":
+            disclaimer = "सूचना: जियो AI परामर्श वैज्ञानिक सिद्धांतों एवं सत्यापित कृषि डेटा पर आधारित एक निर्णय-सहायक प्रणाली है। आपातकालीन कीट प्रकोप या बड़े पैमाने पर रासायनिक छिड़काव हेतु हमेशा अपने स्थानीय कृषि विज्ञान केंद्र (KVK) से परामर्श लें।"
+        else:
+            disclaimer = (
+                "NOTICE: Geo AI advisory is an agronomic decision-support tool based on verified data and scientific reference principles. "
+                "For large-scale chemical applications or emergency disease outbreaks, always consult your local certified agricultural extension officer (KVK) or university agronomist."
+            )
 
         return {
             "answer": " ".join(reply_parts),

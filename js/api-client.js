@@ -132,10 +132,10 @@ class ApiClient {
   }
 
   // --- Module 8: AI Assistant ---
-  static async chatWithAssistant(message) {
+  static async chatWithAssistant(message, language = 'en') {
     return this.request('/assistant/chat', {
       method: 'POST',
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message, language })
     });
   }
 
