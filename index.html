@@ -390,7 +390,7 @@
 
     #stmt {
       position: absolute;
-      top: clamp(25px, 5.5vh, 65px);
+      top: clamp(80px, 11vh, 135px);
       left: 0;
       right: 0;
       width: 100%;
@@ -411,7 +411,7 @@
     /* Hardware Coming Soon Section in Statement Scene */
     .hardware-teaser {
       position: absolute;
-      top: clamp(170px, 23.5vh, 245px);
+      top: clamp(270px, 35vh, 350px);
       left: 0;
       right: 0;
       max-width: 1160px;
@@ -966,7 +966,7 @@
       }
 
       #stmt {
-        top: 32vh;
+        top: clamp(70px, 10vh, 105px);
         white-space: normal;
         font-size: clamp(18px, 5.2vw, 24px);
         line-height: 1.35;
@@ -1466,7 +1466,7 @@
     const h2Chars = prepareTextSpans(h2El);
 
     paint(h1Chars, 0, 0.35, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
-    paint(stmtChars, 0, 0.16, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
+    paint(stmtChars, 0, 0.28, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
     paint(h2Chars, 0, 0.35, [255, 255, 255], [143, 230, 244], [92, 111, 146]);
 
     /* ==========================================================================
@@ -1640,21 +1640,22 @@
       const innerH = window.innerHeight;
       const q = window.scrollY / innerH;
 
-      // Statement rise: s = clamp((q - .69)/.74), translateY(.205*(1-s)²*innerHeight)
-      const s = clamp((q - 0.69) / 0.74);
-      const translateY = 0.205 * Math.pow(1 - s, 2) * innerH;
+      // Synchronized Statement rise & reveal:
+      // Smoothly illuminates and settles between q = 0.55 and q = 1.35
+      const s = clamp((q - 0.55) / 0.80);
+      const translateY = 32 * Math.pow(1 - s, 2);
       stmtEl.style.transform = `translateY(${translateY.toFixed(2)}px)`;
 
-      // Statement reveal: p = clamp((q - .56)/2.03)
-      const pStmt = clamp((q - 0.56) / 2.03);
-      paint(stmtChars, pStmt, 0.16, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
+      // Statement reveal synchronized with rise (spread 0.28 for smooth cohesive illumination):
+      const pStmt = s;
+      paint(stmtChars, pStmt, 0.28, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
 
-      // Hardware teaser reveal animation:
+      // Hardware teaser reveal animation (gracefully follows statement illumination):
       const hwEl = document.getElementById('hardware-teaser');
       if (hwEl) {
-        const pHw = clamp((q - 0.45) / 0.85);
-        hwEl.style.opacity = Math.max(0.3, pHw).toFixed(2);
-        hwEl.style.transform = `translateY(${((1 - pHw) * 20).toFixed(1)}px)`;
+        const pHw = clamp((q - 0.90) / 0.65);
+        hwEl.style.opacity = Math.max(0.15, pHw).toFixed(2);
+        hwEl.style.transform = `translateY(${((1 - pHw) * 24).toFixed(1)}px)`;
       }
 
       // Nav CTA: #nav.on toggled when p > .4
