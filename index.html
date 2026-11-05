@@ -95,6 +95,52 @@
         inset 0 1px 1px 0 rgba(255, 255, 255, 0.60);
     }
 
+    /* Liquid Waterline Navbar Shader Canvas & Drop */
+    .nimbus-glass {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      z-index: -2;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.08);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      backdrop-filter: blur(12px) saturate(140%);
+      pointer-events: none;
+    }
+    .nimbus-water {
+      position: absolute;
+      left: -14px;
+      top: -14px;
+      z-index: -1;
+      pointer-events: none;
+    }
+    .nav[data-gl="off"] .nimbus-water { display: none; }
+    .nimbus-drop {
+      display: none;
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 0;
+      border-radius: 999px;
+      z-index: -1;
+      pointer-events: none;
+      will-change: transform, width;
+      background: radial-gradient(120% 140% at 30% 0%, rgba(255, 255, 255, .75), rgba(255, 255, 255, 0) 55%), rgba(255, 255, 255, .38);
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, .95), inset 0 -2px 6px rgba(0, 162, 255, .22), inset 0 0 0 1px rgba(255, 255, 255, .55), 0 6px 16px -6px rgba(0, 70, 140, .45);
+    }
+    .nav[data-gl="off"] .nimbus-drop { display: block; }
+    .nav-links a {
+      padding: 6px 14px;
+      border-radius: 999px;
+      transition: color 0.2s ease;
+      position: relative;
+      z-index: 2;
+    }
+    .nav-links a[aria-current="page"], .nav-links a:hover {
+      color: #0b1d3a;
+      font-weight: 600;
+    }
+
     @keyframes navin {
       to {
         opacity: 1;
@@ -1778,6 +1824,14 @@
     } else {
       document.body.classList.add('ready');
     }
+  </script>
+  <script src="js/liquid-water-navbar.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.initLiquidWaterNavbar === 'function') {
+        window.initLiquidWaterNavbar('#nav', { tone: 'light', sound: false });
+      }
+    });
   </script>
   <script src="js/api-client.js"></script>
   <script>
