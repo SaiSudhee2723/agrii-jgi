@@ -390,7 +390,7 @@
 
     #stmt {
       position: absolute;
-      top: clamp(80px, 11vh, 135px);
+      top: clamp(140px, 32vh, 320px);
       left: 0;
       right: 0;
       width: 100%;
@@ -406,223 +406,6 @@
       color: var(--ink);
       white-space: normal;
       will-change: transform;
-    }
-
-    /* Hardware Coming Soon Section in Statement Scene */
-    .hardware-teaser {
-      position: absolute;
-      top: clamp(270px, 35vh, 350px);
-      left: 0;
-      right: 0;
-      max-width: 1160px;
-      margin: 0 auto;
-      padding: 0 clamp(16px, 3.5vw, 32px);
-      box-sizing: border-box;
-      pointer-events: auto;
-      text-align: center;
-      transition: transform 0.4s ease, opacity 0.4s ease;
-      will-change: transform, opacity;
-    }
-
-    .hw-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      background: rgba(11, 29, 58, 0.06);
-      border: 1px solid rgba(11, 29, 58, 0.12);
-      border-radius: 999px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #0b1d3a;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      margin-bottom: 10px;
-    }
-
-    .hw-pulse {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #2fe0d0;
-      box-shadow: 0 0 10px #2fe0d0;
-      animation: hwPulse 2s infinite ease-in-out;
-    }
-
-    @keyframes hwPulse {
-      0%, 100% { transform: scale(1); opacity: 0.9; }
-      50% { transform: scale(1.4); opacity: 0.5; }
-    }
-
-    .hw-title {
-      font-size: clamp(20px, 2.1vw, 29px);
-      font-weight: 800;
-      color: #0b1d3a;
-      letter-spacing: -0.02em;
-      margin: 0 0 6px 0;
-      line-height: 1.2;
-    }
-
-    .hw-subtitle {
-      font-size: clamp(13px, 1.05vw, 15px);
-      color: #475569;
-      max-width: 700px;
-      margin: 0 auto 16px auto;
-      line-height: 1.42;
-    }
-
-    .hw-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      text-align: left;
-      margin-bottom: 18px;
-    }
-
-    .hw-card {
-      background: rgba(255, 255, 255, 0.82);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      box-shadow: 0 8px 24px rgba(11, 29, 58, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-      border-radius: 14px;
-      padding: 18px 20px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-      cursor: default;
-    }
-
-    .hw-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 14px 32px rgba(11, 29, 58, 0.1), 0 0 0 1px rgba(47, 224, 208, 0.4);
-      background: rgba(255, 255, 255, 0.94);
-    }
-
-    .hw-card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-
-    .hw-icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      background: #0b1d3a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      box-shadow: 0 4px 10px rgba(11, 29, 58, 0.15);
-    }
-
-    .hw-tag {
-      font-size: 0.72rem;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: #e0f2fe;
-      color: #0369a1;
-      border: 1px solid #bae6fd;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-
-    .hw-name {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #0b1d3a;
-      margin: 0 0 6px 0;
-      letter-spacing: -0.01em;
-    }
-
-    .hw-desc {
-      font-size: 0.81rem;
-      color: #64748b;
-      line-height: 1.45;
-      margin: 0 0 14px 0;
-    }
-
-    .hw-specs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: auto;
-    }
-
-    .hw-spec-pill {
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: #334155;
-      background: rgba(241, 245, 249, 0.85);
-      border: 1px solid rgba(226, 232, 240, 0.8);
-      padding: 3px 8px;
-      border-radius: 6px;
-    }
-
-    .hw-cta-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .hw-form {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 4px;
-      border-radius: 10px;
-      border: 1px solid rgba(11, 29, 58, 0.12);
-      box-shadow: 0 4px 14px rgba(11, 29, 58, 0.04);
-      max-width: 480px;
-      width: 100%;
-    }
-
-    .hw-input {
-      flex: 1;
-      border: none;
-      background: transparent;
-      padding: 8px 12px;
-      font-size: 0.86rem;
-      color: #0b1d3a;
-      outline: none;
-      font-family: inherit;
-    }
-
-    .hw-btn {
-      background: #0b1d3a;
-      color: #ffffff;
-      border: none;
-      border-radius: 8px;
-      padding: 9px 18px;
-      font-size: 0.82rem;
-      font-weight: 700;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.2s ease, transform 0.2s ease;
-    }
-
-    .hw-btn:hover {
-      background: #1e3a68;
-      transform: translateY(-1px);
-    }
-
-    .hw-feedback {
-      display: none;
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: #166534;
-      background: #dcfce7;
-      padding: 6px 14px;
-      border-radius: 8px;
-      border: 1px solid #bbf7d0;
     }
 
     /* Dark Split Section */
@@ -966,7 +749,7 @@
       }
 
       #stmt {
-        top: clamp(70px, 10vh, 105px);
+        top: clamp(120px, 28vh, 220px);
         white-space: normal;
         font-size: clamp(18px, 5.2vw, 24px);
         line-height: 1.35;
@@ -1127,76 +910,7 @@
       <div class="pin">
         <p id="stmt">Geo is an AI agronomist<br>that analyzes soil health, predicts optimum crops,<br>calculates precision irrigation, tracks mandi prices,<br>and guides farmers every step from seed to harvest</p>
 
-        <!-- HARDWARE COMING SOON ECOSYSTEM TEASER -->
-        <div class="hardware-teaser" id="hardware-teaser">
-          <div class="hw-badge">
-            <span class="hw-pulse"></span>
-            <span>⚡ Next-Gen Farm Hardware • Coming Soon</span>
-          </div>
-
-          <h3 class="hw-title">Autonomous Agricultural Hardware Ecosystem</h3>
-          <p class="hw-subtitle">Rugged off-grid IoT sensors, multispectral canopy scanners, and motorized valve actuators built for demanding field conditions — seamlessly synchronized with Geo AI.</p>
-
-          <div class="hw-grid">
-            <!-- Hardware 1: Soil NPK Station -->
-            <div class="hw-card">
-              <div class="hw-card-top">
-                <div class="hw-icon">📡</div>
-                <span class="hw-tag">In Field Trials</span>
               </div>
-              <h4 class="hw-name">Geosense TerraProbe™</h4>
-              <p class="hw-desc">Multi-depth wireless soil probe delivering real-time volumetric moisture, EC, soil temperature, and electrochemical NPK ion metrics directly to your dashboard.</p>
-              <div class="hw-specs">
-                <span class="hw-spec-pill">☀️ Solar + LiFePO4</span>
-                <span class="hw-spec-pill">📶 15km LoRaWAN + 4G</span>
-                <span class="hw-spec-pill">🛡️ IP68 Submersible</span>
-              </div>
-            </div>
-
-            <!-- Hardware 2: Canopy Scanner -->
-            <div class="hw-card">
-              <div class="hw-card-top">
-                <div class="hw-icon">🛰️</div>
-                <span class="hw-tag">Beta Pilot</span>
-              </div>
-              <h4 class="hw-name">Geosense AeroNode™</h4>
-              <p class="hw-desc">Pole-mounted multispectral canopy node. Captures daily calibrated NIR & visible frames for automated NDVI vegetative health and early pest stress heatmaps.</p>
-              <div class="hw-specs">
-                <span class="hw-spec-pill">🍃 Dual-Band NIR/RGB</span>
-                <span class="hw-spec-pill">🤖 Edge TPU Neural Vision</span>
-                <span class="hw-spec-pill">🔋 100% Autonomous</span>
-              </div>
-            </div>
-
-            <!-- Hardware 3: Smart Valve -->
-            <div class="hw-card">
-              <div class="hw-card-top">
-                <div class="hw-icon">💧</div>
-                <span class="hw-tag">Prototype Testing</span>
-              </div>
-              <h4 class="hw-name">Geosense HydroValve™</h4>
-              <p class="hw-desc">Automated motorized irrigation valve actuator. Direct link with FAO-56 evapotranspiration telemetry and rainfall forecasts for zero-waste precision watering.</p>
-              <div class="hw-specs">
-                <span class="hw-spec-pill">🚰 1" to 3" High-Flow</span>
-                <span class="hw-spec-pill">🌧️ Weather-Aware Auto Cut</span>
-                <span class="hw-spec-pill">📱 Offline BLE Mesh</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Early Access Waitlist Form -->
-          <div class="hw-cta-wrap">
-            <div class="hw-form">
-              <input type="email" id="hw-email-input" placeholder="Enter email for hardware pilot access & pricing..." class="hw-input" />
-              <button type="button" id="btn-hw-notify" class="hw-btn">Join Pilot Waitlist</button>
-            </div>
-            <div id="hw-feedback" class="hw-feedback"></div>
-            <div style="font-size: 0.75rem; color: #64748b;">
-              🔒 Priority field deployment and subsidized pilot units for registered Indian & global farmers.
-            </div>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- Scene 3: Dark Split -->
@@ -1650,14 +1364,6 @@
       const pStmt = s;
       paint(stmtChars, pStmt, 0.28, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
 
-      // Hardware teaser reveal animation (gracefully follows statement illumination):
-      const hwEl = document.getElementById('hardware-teaser');
-      if (hwEl) {
-        const pHw = clamp((q - 0.90) / 0.65);
-        hwEl.style.opacity = Math.max(0.15, pHw).toFixed(2);
-        hwEl.style.transform = `translateY(${((1 - pHw) * 24).toFixed(1)}px)`;
-      }
-
       // Nav CTA: #nav.on toggled when p > .4
       navEl.classList.toggle('on', pStmt > 0.4);
 
@@ -1680,30 +1386,6 @@
 
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
-
-    // Hardware Pilot Waitlist Handler
-    const hwBtn = document.getElementById('btn-hw-notify');
-    const hwInput = document.getElementById('hw-email-input');
-    const hwFeedback = document.getElementById('hw-feedback');
-    if (hwBtn && hwInput) {
-      hwBtn.addEventListener('click', () => {
-        const email = hwInput.value.trim();
-        if (!email || !email.includes('@')) {
-          alert('Please enter a valid email address.');
-          return;
-        }
-        hwBtn.disabled = true;
-        hwBtn.textContent = 'Joined!';
-        hwInput.disabled = true;
-        if (hwFeedback) {
-          hwFeedback.style.display = 'block';
-          hwFeedback.textContent = `✅ Success! You are on the priority Geosense Hardware Pilot waitlist. Updates will be sent to ${email}.`;
-        }
-        try {
-          localStorage.setItem('geosense_hw_waitlist', email);
-        } catch (_) {}
-      });
-    }
 
     /* ==========================================================================
        4. Main Animation Loop
