@@ -1,8 +1,8 @@
 /**
  * Nimbus UI · Liquid Waterline Navbar Engine for Geosense
  * Ported from components/ui/liquid-glass-navbar.tsx
- * Pure WebGL water physics: elastic droplet stretch, splitting satellites,
- * meniscus cursor tracking, interactive ripple waves, and fallback drop.
+ * Precision getBoundingClientRect alignment, elastic droplet stretch,
+ * satellite splitting on jumps, cursor meniscus, and interactive ripples.
  */
 (function(window) {
   'use strict';
@@ -91,7 +91,10 @@ void main(){
     const nav = typeof navElement === 'string' ? document.querySelector(navElement) : navElement;
     if (!nav) return;
 
-    // Ensure container styling and relative positioning
+    // Navigation links are the water items
+    const items = Array.from(nav.querySelectorAll('.nav-links a'));
+    if (!items.length) return;
+
     nav.classList.add('nimbus-nav');
     nav.setAttribute('data-tone', options.tone || 'light');
 
@@ -122,8 +125,8 @@ void main(){
       nav.insertBefore(drop, canvas.nextSibling);
     }
 
-    const items = Array.from(nav.querySelectorAll('.nav-links a, .brand, .login'));
-    let current = 0;
+    let activeIndex = 0;
+    let targetIndex = 0;
 
     const st = {
       a: { x: 0, v: 0 },
@@ -133,7 +136,7 @@ void main(){
       lagFrom: 0,
       sats: [],
       rips: [],
-      t: { x: 0, cy: 0, q: 0, r: 21 },
+      t: { x: 0, cy: 0, q: 0, r: 18 },
       q: 0,
       mouse: { x: 0, y: 0, s: 0, on: false },
       moving: false,
@@ -212,8 +215,8 @@ void main(){
       } else {
         bodies.forEach((B, i) => {
           const lead = i === st.lead;
-          const k = lead ? 210 : 72;
-          const c = lead ? 25 : 13;
+          const k = lead ? 220 : 75;
+          const c = lead ? 26 : 14;
           const f = !lead && now < st.lagFrom ? 0.08 : 1;
           B.v += (k * (T.x - B.x) - c * B.v) * dt * f;
           B.x += B.v * dt;
@@ -294,16 +297,29 @@ void main(){
       st.raf = requestAnimationFrame(tick);
     }
 
-    function measure() {
-      const el = items[current] || nav.querySelector('.nav-links a');
+    function measure(idx) {
+      const activeElIndex = typeof idx === 'number' ? idx : targetIndex;
+      const el = items[activeElIndex] || items[0];
       if (!nav || !el) return;
+
+      const navR = nav.getBoundingClientRect();
+      const elR = el.getBoundingClientRect();
+
       st.w = nav.offsetWidth;
       st.h = nav.offsetHeight;
+
+      // Real screen coordinates inside the navbar
+      const nx = PAD + (elR.left - navR.left) + elR.width / 2;
+      const cy = PAD + (elR.top - navR.top) + elR.height / 2;
+
+      // Calculate capsule bounds matching text dimensions with natural cushion
+      const r = Math.max(15, elR.height / 2);
+      const q = Math.max(0, elR.width / 2 - r);
+
       const T = st.t;
-      T.r = el.offsetHeight / 2;
-      T.q = Math.max(0, el.offsetWidth / 2 - T.r);
-      T.cy = PAD + el.offsetTop + el.offsetHeight / 2;
-      const nx = PAD + el.offsetLeft + el.offsetWidth / 2;
+      T.r = r;
+      T.q = q;
+      T.cy = cy;
 
       if (!st.ready) {
         st.a.x = st.b.x = nx;
@@ -342,49 +358,38 @@ void main(){
       loop();
     }
 
-    function playPlip() {
-      if (!options.sound) return;
-      try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AC();
-        const t = ctx.currentTime;
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(440 + Math.random() * 80, t);
-        o.frequency.exponentialRampToValueAtTime(1400, t + 0.07);
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.14, t + 0.008);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-        o.connect(g).connect(ctx.destination);
-        o.start(t);
-        o.stop(t + 0.18);
-      } catch (e) {}
-    }
-
-    function setActive(idx) {
+    function setTarget(idx, lock) {
       if (idx < 0 || idx >= items.length) return;
-      current = idx;
+      targetIndex = idx;
+      if (lock) {
+        activeIndex = idx;
+      }
       items.forEach((it, i) => {
-        if (i === current) it.setAttribute('aria-current', 'page');
+        if (i === activeIndex) it.setAttribute('aria-current', 'page');
         else it.removeAttribute('aria-current');
       });
-      playPlip();
-      measure();
+      measure(idx);
     }
 
     // Attach item events
     items.forEach((item, idx) => {
       item.addEventListener('mouseenter', () => {
-        setActive(idx);
+        setTarget(idx, false);
       });
-      item.addEventListener('click', (e) => {
-        setActive(idx);
-        const r = item.getBoundingClientRect();
+      item.addEventListener('click', () => {
+        setTarget(idx, true);
+        const elR = item.getBoundingClientRect();
         const navR = nav.getBoundingClientRect();
-        ripple(r.left - navR.left + r.width / 2 + PAD, st.t.cy, 1.3);
+        ripple(PAD + (elR.left - navR.left) + elR.width / 2, st.t.cy, 1.35);
       });
     });
+
+    const navLinks = nav.querySelector('.nav-links');
+    if (navLinks) {
+      navLinks.addEventListener('mouseleave', () => {
+        setTarget(activeIndex, false);
+      });
+    }
 
     // Pointer events for cursor meniscus
     nav.addEventListener('pointermove', (e) => {
@@ -411,16 +416,19 @@ void main(){
       const ro = new ResizeObserver(() => measure());
       ro.observe(nav);
     }
-    window.addEventListener('resize', measure);
+    window.addEventListener('resize', () => measure());
 
-    // Initial measure after fonts and layout settle
-    requestAnimationFrame(() => {
+    // Re-measure after animations finish
+    setTimeout(() => {
+      st.ready = false;
       measure();
-      setTimeout(measure, 100);
-    });
+    }, 150);
+    setTimeout(() => {
+      measure();
+    }, 1000);
 
     return {
-      setActive,
+      setActive: (idx) => setTarget(idx, true),
       ripple,
       measure
     };

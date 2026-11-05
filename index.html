@@ -1819,6 +1819,7 @@
       window.runLiquidGlassStartup({
         onComplete: () => {
           document.body.classList.add('ready');
+          if (window.liquidNav) window.liquidNav.measure();
         }
       });
     } else {
@@ -1829,7 +1830,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       if (typeof window.initLiquidWaterNavbar === 'function') {
-        window.initLiquidWaterNavbar('#nav', { tone: 'light', sound: false });
+        window.liquidNav = window.initLiquidWaterNavbar('#nav', { tone: 'light', sound: false });
       }
     });
   </script>
