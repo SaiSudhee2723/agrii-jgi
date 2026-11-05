@@ -306,6 +306,28 @@
       letter-spacing: -.035em;
       white-space: nowrap;
       color: var(--ink);
+      opacity: 0;
+      transform: translateY(-60px);
+      will-change: transform, opacity;
+    }
+
+    body.ready .hero h1#h1 {
+      animation: heroH1Entrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes heroH1Entrance {
+      0% {
+        opacity: 0;
+        transform: translateY(-60px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hero h1#h1 .hl {
+      color: var(--accent);
     }
 
     .hero .trust {
@@ -709,7 +731,7 @@
       }
 
       .hero h1#h1 {
-        top: 17vh;
+        top: clamp(115px, 18vh, 150px);
         font-size: 7.4vw;
         white-space: normal;
         padding-right: var(--gut);
@@ -1175,11 +1197,10 @@
     const shipEl = document.getElementById('ship');
 
     // 1. Split text blocks and paint at p=0
-    const h1Chars = prepareTextSpans(h1El);
+    // Statement and Scene 3 character span preparation (h1 animates as a clean unified block)
     const stmtChars = prepareTextSpans(stmtEl);
     const h2Chars = prepareTextSpans(h2El);
 
-    paint(h1Chars, 0, 0.35, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
     paint(stmtChars, 0, 0.28, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
     paint(h2Chars, 0, 0.35, [255, 255, 255], [143, 230, 244], [92, 111, 146]);
 
@@ -1390,19 +1411,8 @@
     /* ==========================================================================
        4. Main Animation Loop
        ========================================================================== */
-    let h1Revealed = false;
-
     function tick(now) {
       renderGlow(now);
-
-      // Hero headline time-based reveal over 1.25s from load
-      if (!h1Revealed) {
-        const elapsed = (now - h1Start) / 1000;
-        const pH1 = clamp(elapsed / 1.25);
-        paint(h1Chars, pH1, 0.35, [11, 29, 58], [63, 124, 255], [255, 255, 255]);
-        if (pH1 >= 1) h1Revealed = true;
-      }
-
       onScroll();
       requestAnimationFrame(tick);
     }
