@@ -16,11 +16,58 @@
 
   const currentUser = window.GeosenseApi ? window.GeosenseApi.getUser() : null;
   let activeSoilBlob = null;
+  let latestFarmContext = { soil: null, crop: null, weather: null, diseaseDiagnosis: null };
+  let activeWeatherManualQuery = false;
+  let refreshAssistantPromptUi = () => {};
+  let pushDiagnosisToAssistant = () => {};
+
+  // Restore last known session GPS coords if available for instant load
+  try {
+    const cachedLoc = sessionStorage.getItem('geosense_last_loc');
+    if (cachedLoc) window._geosenseLastLocation = JSON.parse(cachedLoc);
+  } catch (_) {}
+
+  function saveActiveLocation(lat, lon, name = '', isGps = false) {
+    if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
+    window._geosenseLastLocation = {
+      lat: parseFloat(lat.toFixed(5)),
+      lon: parseFloat(lon.toFixed(5)),
+      name: name || '',
+      isGps: !!isGps
+    };
+    try {
+      sessionStorage.setItem('geosense_last_loc', JSON.stringify(window._geosenseLastLocation));
+    } catch (_) {}
+  }
+
+  function acquireBrowserGps(forceFresh = false) {
+    return new Promise((resolve) => {
+      if (!forceFresh && window._geosenseLastLocation && window._geosenseLastLocation.isGps) {
+        resolve(window._geosenseLastLocation);
+        return;
+      }
+      if (!('geolocation' in navigator)) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = parseFloat(pos.coords.latitude.toFixed(5));
+          const lon = parseFloat(pos.coords.longitude.toFixed(5));
+          saveActiveLocation(lat, lon, '', true);
+          resolve(window._geosenseLastLocation);
+        },
+        () => resolve(null),
+        { timeout: 8000, enableHighAccuracy: true, maximumAge: forceFresh ? 0 : 60000 }
+      );
+    });
+  }
 
   document.addEventListener('DOMContentLoaded', () => {
     initUserInterface();
     bindSidebarNavigation();
     bindSoilModule();
+    bindDiseaseModule();
     bindCropModule();
     bindIrrigationModule();
     bindWeatherModule();
@@ -29,11 +76,22 @@
     bindAiAssistantModule();
     bindSignOut();
 
-    // Initial load: Overview stats and initial tab histories
-    loadDashboardOverview();
+    // Initial load: Overview stats (with cached coords if available) and initial tab histories
+    const initLoc = window._geosenseLastLocation;
+    loadDashboardOverview(initLoc ? initLoc.lat : null, initLoc ? initLoc.lon : null);
     loadSoilHistory();
     loadCropHistory();
     loadIrrigationHistory();
+
+    // Acquire accurate browser GPS once and refresh overview + weather with exact locality
+    acquireBrowserGps(false).then((gps) => {
+      if (!gps) return;
+      loadDashboardOverview(gps.lat, gps.lon);
+      const weatherPane = document.getElementById('pane-weather');
+      if (weatherPane && weatherPane.classList.contains('active') && !activeWeatherManualQuery) {
+        loadWeatherModuleData(null, { lat: gps.lat, lon: gps.lon, name: '' });
+      }
+    });
   });
 
   function initUserInterface() {
@@ -80,11 +138,21 @@
         }
 
         // Lazy-load module data on tab switch
-        if (target === 'overview') loadDashboardOverview();
+        if (target === 'overview') {
+          const loc = window._geosenseLastLocation;
+          loadDashboardOverview(loc ? loc.lat : null, loc ? loc.lon : null);
+        }
         if (target === 'soil') loadSoilHistory();
         if (target === 'crop') loadCropHistory();
         if (target === 'irrigation') loadIrrigationHistory();
-        if (target === 'weather') loadWeatherModuleData();
+        if (target === 'weather') {
+          const loc = window._geosenseLastLocation;
+          if (loc && loc.lat && loc.lon) {
+            loadWeatherModuleData(null, { lat: loc.lat, lon: loc.lon, name: loc.name || '' });
+          } else {
+            loadWeatherModuleData();
+          }
+        }
         if (target === 'market') loadMarketModuleData();
         if (target === 'community') loadCommunityModuleData();
       });
@@ -97,15 +165,22 @@
         const target = activeNav.getAttribute('data-target');
         pageTitle.textContent = window.GeosenseI18n.t(`header.title_${target}`, activeNav.querySelector('span:last-child').textContent);
       }
+      refreshAssistantPromptUi();
     });
   }
 
   // --------------------------------------------------------------------------
   // MODULE 1: OVERVIEW (REAL USER-SPECIFIC DATA & ZERO FAKE STATS)
   // --------------------------------------------------------------------------
-  async function loadDashboardOverview() {
+  async function loadDashboardOverview(lat = null, lon = null) {
     try {
-      const stats = await window.GeosenseApi.getDashboardOverview();
+      const loc = window._geosenseLastLocation;
+      const reqLat = lat !== null && lat !== undefined ? lat : (loc ? loc.lat : null);
+      const reqLon = lon !== null && lon !== undefined ? lon : (loc ? loc.lon : null);
+      const stats = await window.GeosenseApi.getDashboardOverview(reqLat, reqLon);
+      latestFarmContext.soil = stats.latest_soil_test || null;
+      latestFarmContext.crop = stats.latest_crop_recommendation || null;
+      latestFarmContext.weather = stats.live_weather || null;
 
       // 1. Soil Tests Count
       const soilCountEl = document.getElementById('ov-soil-count');
@@ -113,6 +188,7 @@
       if (soilCountEl) soilCountEl.textContent = stats.total_soil_tests;
       if (soilDetailEl) {
         if (stats.latest_soil_test) {
+          soilDetailEl.removeAttribute('data-i18n');
           const t = stats.latest_soil_test;
           if (t.nitrogen_ppm !== null && t.nitrogen_ppm !== undefined) {
             soilDetailEl.textContent = `Latest: N=${t.nitrogen_ppm}, P=${t.phosphorus_ppm}, K=${t.potassium_ppm}`;
@@ -120,7 +196,7 @@
             soilDetailEl.textContent = `Latest: ${t.soil_condition || 'Optical scan recorded'}`;
           }
         } else {
-          soilDetailEl.textContent = 'No soil tests submitted yet';
+          soilDetailEl.setAttribute('data-i18n', 'overview.metric_soil_empty');
         }
       }
 
@@ -133,9 +209,12 @@
           : 'None';
       }
       if (cropDetailEl) {
-        cropDetailEl.textContent = stats.latest_crop_recommendation
-          ? `${(stats.latest_crop_recommendation.confidence_score * 100).toFixed(0)}% confidence score`
-          : 'Run ML model to compute';
+        if (stats.latest_crop_recommendation) {
+          cropDetailEl.removeAttribute('data-i18n');
+          cropDetailEl.textContent = `${(stats.latest_crop_recommendation.confidence_score * 100).toFixed(0)}% confidence score`;
+        } else {
+          cropDetailEl.setAttribute('data-i18n', 'overview.metric_crop_empty');
+        }
       }
 
       // 3. Irrigation Requirement
@@ -147,24 +226,47 @@
           : 'None';
       }
       if (irrigDetailEl) {
-        irrigDetailEl.textContent = stats.latest_irrigation
-          ? `${stats.latest_irrigation.crop_name} (${stats.latest_irrigation.growth_stage} stage)`
-          : 'No calculation performed yet';
+        if (stats.latest_irrigation) {
+          irrigDetailEl.removeAttribute('data-i18n');
+          irrigDetailEl.textContent = `${stats.latest_irrigation.crop_name} (${stats.latest_irrigation.growth_stage} stage)`;
+        } else {
+          irrigDetailEl.setAttribute('data-i18n', 'overview.metric_irrigation_empty');
+        }
       }
 
-      // 4. Live Weather Telemetry
+      // 4. Live Weather Telemetry (display exact detected location!)
       const weatherValEl = document.getElementById('ov-weather-val');
       const weatherDetailEl = document.getElementById('ov-weather-detail');
       const weatherSourceEl = document.getElementById('ov-weather-source');
 
       if (stats.live_weather && stats.live_weather.is_available) {
         if (weatherValEl) weatherValEl.textContent = `${stats.live_weather.temperature}°C`;
-        if (weatherDetailEl) weatherDetailEl.textContent = `${stats.live_weather.condition} • Humidity: ${stats.live_weather.humidity}%`;
-        if (weatherSourceEl) weatherSourceEl.textContent = 'Live Open-Meteo';
+        if (weatherDetailEl) {
+          weatherDetailEl.removeAttribute('data-i18n');
+          const locLabel = stats.live_weather.location ? `📍 ${stats.live_weather.location} • ` : '';
+          weatherDetailEl.textContent = `${locLabel}${stats.live_weather.condition} • ${stats.live_weather.humidity}% RH`;
+        }
+        if (weatherSourceEl) {
+          weatherSourceEl.removeAttribute('data-i18n');
+          weatherSourceEl.textContent = stats.live_weather.location || 'Live Telemetry';
+        }
+        if (stats.live_weather.latitude && stats.live_weather.longitude && stats.live_weather.location) {
+          if (!window._geosenseLastLocation) {
+            saveActiveLocation(stats.live_weather.latitude, stats.live_weather.longitude, stats.live_weather.location, false);
+          } else if (!window._geosenseLastLocation.name) {
+            saveActiveLocation(window._geosenseLastLocation.lat, window._geosenseLastLocation.lon, stats.live_weather.location, window._geosenseLastLocation.isGps);
+          }
+        }
       } else {
         if (weatherValEl) weatherValEl.textContent = '--°C';
-        if (weatherDetailEl) weatherDetailEl.textContent = 'Data temporarily unavailable';
-        if (weatherSourceEl) weatherSourceEl.textContent = 'Offline';
+        if (weatherDetailEl) {
+          weatherDetailEl.removeAttribute('data-i18n');
+          weatherDetailEl.textContent = 'Data temporarily unavailable';
+        }
+        if (weatherSourceEl) {
+          weatherSourceEl.removeAttribute('data-i18n');
+          weatherSourceEl.textContent = 'Offline';
+        }
       }
 
       // 5. Recent Activities Feed
@@ -189,6 +291,7 @@
           `;
         }
       }
+      refreshAssistantPromptUi();
       if (window.GeosenseI18n) window.GeosenseI18n.applyTranslations();
     } catch (err) {
       console.warn('Dashboard overview error:', err);
@@ -209,6 +312,7 @@
     const btnUpload = document.getElementById('dash-btn-upload');
     const btnReset = document.getElementById('dash-btn-reset');
     const btnAnalyze = document.getElementById('dash-btn-analyze');
+    const btnPredictNpk = document.getElementById('dash-btn-predict-npk');
     const resultBox = document.getElementById('dash-soil-result');
 
     btnCamera.addEventListener('click', async () => {
@@ -238,6 +342,7 @@
         preview.src = URL.createObjectURL(activeSoilBlob);
         preview.style.display = 'block';
         btnAnalyze.disabled = false;
+        if (btnPredictNpk) btnPredictNpk.disabled = false;
       } catch (err) {
         alert(err.message);
       }
@@ -259,6 +364,7 @@
       preview.style.display = 'block';
       btnReset.style.display = 'inline-flex';
       btnAnalyze.disabled = false;
+      if (btnPredictNpk) btnPredictNpk.disabled = false;
     });
 
     btnReset.addEventListener('click', () => {
@@ -275,6 +381,7 @@
       btnSnap.style.display = 'none';
       btnReset.style.display = 'none';
       btnAnalyze.disabled = true;
+      if (btnPredictNpk) btnPredictNpk.disabled = true;
       resultBox.innerHTML = '';
     });
 
@@ -334,9 +441,127 @@
         alert(err.message);
       } finally {
         btnAnalyze.disabled = false;
-        btnAnalyze.textContent = 'Run AI Quality Check';
+        btnAnalyze.textContent = window.GeosenseI18n ? window.GeosenseI18n.t('soil.btn_analyze') : 'Run AI Quality Check';
       }
     });
+
+    if (btnPredictNpk) {
+      btnPredictNpk.addEventListener('click', async () => {
+        if (!activeSoilBlob) return;
+
+        btnPredictNpk.disabled = true;
+        btnPredictNpk.textContent = 'Running Vision NPK Model...';
+
+        try {
+          const aiClient = window.GeosenseAiClient;
+          const isOfflineMode = aiClient && aiClient.getState().mode === 'offline';
+
+          let res;
+          if (isOfflineMode) {
+            res = await aiClient.estimateNpkOffline(activeSoilBlob);
+          } else {
+            try {
+              res = await window.GeosenseApi.predictSoilNPK(activeSoilBlob);
+            } catch (apiErr) {
+              if (aiClient && aiClient.estimateNpkOffline) {
+                res = await aiClient.estimateNpkOffline(activeSoilBlob);
+              } else {
+                throw apiErr;
+              }
+            }
+          }
+
+          const pillClass = (st) => {
+            const s = (st || '').toLowerCase();
+            if (s === 'low') return 'low';
+            if (s === 'high') return 'high';
+            return 'optimal';
+          };
+
+          const titleLabel = window.GeosenseI18n ? window.GeosenseI18n.t('soil.npk_result_title') : 'Vision AI Soil / Leaf NPK Prediction';
+          const applyLabel = window.GeosenseI18n ? window.GeosenseI18n.t('soil.npk_apply_btn') : '📋 Apply to Crop & Soil Forms';
+          const sourceBadge = res.model_source === 'real_dataset'
+            ? ' <span class="data-source-badge live" style="margin-left: 6px; font-size: 0.72rem;">Real Dataset Model</span>'
+            : '';
+
+          resultBox.innerHTML = `
+            <div class="npk-liquid-glass">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                  <h4 style="font-size: 1.12rem; font-weight: 700; color: #0b1d3a; margin: 0;">${escapeHtml(titleLabel)}</h4>
+                  <small style="color: #475569;">${escapeHtml(res.inference_engine || 'ONNX Runtime (npk_model.onnx)')}</small>${sourceBadge}
+                </div>
+                <button type="button" id="btn-apply-vision-npk" class="btn-geo-secondary" style="font-size: 0.82rem; padding: 7px 14px; background: rgba(255,255,255,0.9);">
+                  ${escapeHtml(applyLabel)}
+                </button>
+              </div>
+
+              <div class="npk-nutrient-grid">
+                <div class="npk-nutrient-tile">
+                  <small style="color: #64748b; font-weight: 600;">NITROGEN (N)</small>
+                  <div style="font-size: 1.55rem; font-weight: 800; color: #0b1d3a;">${res.nitrogen} <span style="font-size: 0.82rem; font-weight: 500; color: #64748b;">kg/ha</span></div>
+                  <span class="npk-status-pill ${pillClass(res.status?.N)}">${escapeHtml(res.status?.N || 'Optimal')}</span>
+                </div>
+                <div class="npk-nutrient-tile">
+                  <small style="color: #64748b; font-weight: 600;">PHOSPHORUS (P)</small>
+                  <div style="font-size: 1.55rem; font-weight: 800; color: #0b1d3a;">${res.phosphorus} <span style="font-size: 0.82rem; font-weight: 500; color: #64748b;">kg/ha</span></div>
+                  <span class="npk-status-pill ${pillClass(res.status?.P)}">${escapeHtml(res.status?.P || 'Optimal')}</span>
+                </div>
+                <div class="npk-nutrient-tile">
+                  <small style="color: #64748b; font-weight: 600;">POTASSIUM (K)</small>
+                  <div style="font-size: 1.55rem; font-weight: 800; color: #0b1d3a;">${res.potassium} <span style="font-size: 0.82rem; font-weight: 500; color: #64748b;">kg/ha</span></div>
+                  <span class="npk-status-pill ${pillClass(res.status?.K)}">${escapeHtml(res.status?.K || 'Optimal')}</span>
+                </div>
+              </div>
+
+              <div style="padding: 12px 16px; background: rgba(239, 246, 255, 0.88); border-left: 4px solid #0ea5e9; border-radius: 8px; margin-bottom: 14px; font-size: 0.84rem; line-height: 1.5; color: #1e3a8a;">
+                <strong>ℹ️ Notice:</strong> ${escapeHtml(res.scientific_disclaimer || '')}
+              </div>
+
+              <div>
+                <h5 style="font-size: 0.92rem; font-weight: 600; margin-bottom: 6px; color: #0b1d3a;">Recommended Agronomic Actions:</h5>
+                <ul style="padding-left: 18px; font-size: 0.88rem; color: #334155;">
+                  ${(res.recommendations || []).map(r => `<li style="margin-bottom: 4px;">${escapeHtml(r)}</li>`).join('')}
+                </ul>
+              </div>
+            </div>
+          `;
+
+          const applyBtn = document.getElementById('btn-apply-vision-npk');
+          if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+              const sN = document.getElementById('inp-soil-n');
+              const sP = document.getElementById('inp-soil-p');
+              const sK = document.getElementById('inp-soil-k');
+              if (sN) sN.value = Math.round(res.nitrogen);
+              if (sP) sP.value = Math.round(res.phosphorus);
+              if (sK) sK.value = Math.round(res.potassium);
+
+              const cropForm = document.getElementById('dash-crop-form');
+              if (cropForm) {
+                const cN = cropForm.querySelector('input[name="n"]');
+                const cP = cropForm.querySelector('input[name="p"]');
+                const cK = cropForm.querySelector('input[name="k"]');
+                if (cN) cN.value = Math.round(res.nitrogen);
+                if (cP) cP.value = Math.round(res.phosphorus);
+                if (cK) cK.value = Math.round(res.potassium);
+              }
+
+              applyBtn.textContent = '✅ Applied to Forms!';
+              setTimeout(() => { applyBtn.textContent = applyLabel; }, 2200);
+            });
+          }
+
+          loadSoilHistory();
+          loadDashboardOverview();
+        } catch (err) {
+          alert('NPK prediction error: ' + (err.message || err));
+        } finally {
+          btnPredictNpk.disabled = false;
+          btnPredictNpk.textContent = window.GeosenseI18n ? window.GeosenseI18n.t('soil.btn_predict_npk') : '🔬 Predict Vision NPK (ONNX)';
+        }
+      });
+    }
 
     // B) Real Lab Test Manual Ingestion Form
     const manualForm = document.getElementById('dash-manual-soil-form');
@@ -396,7 +621,7 @@
         <div class="history-card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div style="font-weight: 700; color: #0b1d3a; font-size: 0.95rem;">
-              ${r.measurement_type === 'optical_camera' ? '📷 Camera Optical Diagnostic' : '🧪 ' + (r.lab_name || 'Laboratory Soil Assay')}
+              ${r.measurement_type === 'optical_camera' ? '📷 Camera Optical Diagnostic' : (r.measurement_type === 'vision_npk_onnx' ? '🔬 Vision AI NPK Scan (ONNX)' : '🧪 ' + (r.lab_name || 'Laboratory Soil Assay'))}
             </div>
             <span class="data-source-badge ${r.measurement_type === 'laboratory_report' ? 'lab' : ''}">
               ${escapeHtml(r.data_source)}
@@ -425,6 +650,277 @@
     } catch (err) {
       container.innerHTML = `<div style="padding: 16px; color: #b91c1c;">Unable to load soil test history: ${err.message}</div>`;
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // MODULE 2B: CROP INFECTION & DISEASE SCANNER (ONNX + ICAR PATHOLOGY)
+  // --------------------------------------------------------------------------
+  function renderDiagnosisMarkdownReport(diag) {
+    if (!diag) return '';
+    const title = diag.disease_name || diag.condition_name || 'Leaf Diagnosis';
+    const confPct = `${Math.round((diag.confidence || 0) * 100)}%`;
+    const sol = diag.solution_to_fix || diag.immediate_solution || {};
+    const immList = (sol.immediate_field_action || []).map(x => `- ${x}`).join('\n');
+    const orgList = (sol.organic_cultural || []).map(x => `- ${x}`).join('\n');
+    const chemList = (sol.chemical_targeted || []).map(x => `- ${x}`).join('\n');
+    const prevList = (diag.prevention || []).map(x => `- ${x}`).join('\n');
+    const lines = [
+      `### ${title} (${confPct})`,
+      `**Pathogen / Cause:** ${diag.pathogen_or_cause || diag.pathogen_type || ''}`,
+      diag.observed_symptoms ? `**Observed Visual Symptoms:** ${diag.observed_symptoms}` : '',
+      '',
+      `**Why It Was Infected:**`,
+      diag.why_infected || ''
+    ].filter((x, i) => x !== '' || i > 2);
+
+    if (immList) lines.push('', `**1. Immediate Field Action:**`, immList);
+    if (orgList) lines.push('', `**2. Organic / Bio-Control Solution:**`, orgList);
+    if (chemList) lines.push('', `**3. Targeted Chemical Solution (ICAR 15L Pump Dosage):**`, chemList);
+    if (sol.spray_notes) lines.push('', `*Spray Interval Note:* ${sol.spray_notes}`);
+    if (prevList) lines.push('', `**Prevention:**`, prevList);
+    lines.push('', `Ask any follow-up below (e.g., *"How much medicine for a 15-liter spray pump?"* or *"Can I mix this with foliar fertilizer?"*).`);
+    return lines.join('\n');
+  }
+
+  function bindDiseaseModule() {
+    const video = document.getElementById('dash-disease-video');
+    const preview = document.getElementById('dash-disease-preview');
+    const placeholder = document.getElementById('dash-disease-placeholder');
+    const fileInput = document.getElementById('dash-disease-file');
+    const qInput = document.getElementById('dash-disease-question');
+    const btnCamera = document.getElementById('dash-disease-btn-camera');
+    const btnSnap = document.getElementById('dash-disease-btn-snap');
+    const btnUpload = document.getElementById('dash-disease-btn-upload');
+    const btnReset = document.getElementById('dash-disease-btn-reset');
+    const btnDiagnose = document.getElementById('dash-btn-diagnose-disease');
+    const resultBox = document.getElementById('dash-disease-result');
+
+    if (!btnDiagnose || !fileInput) return;
+
+    let activeDiseaseBlob = null;
+    let activeDiseaseThumbUrl = '';
+
+    const setDiseaseImage = (blobOrFile, dataUrl) => {
+      activeDiseaseBlob = blobOrFile;
+      activeDiseaseThumbUrl = dataUrl || '';
+      if (placeholder) placeholder.style.display = 'none';
+      if (video) video.style.display = 'none';
+      if (preview) {
+        preview.src = activeDiseaseThumbUrl;
+        preview.style.display = 'block';
+      }
+      if (btnSnap) btnSnap.style.display = 'none';
+      if (btnReset) btnReset.style.display = 'inline-flex';
+      btnDiagnose.disabled = false;
+    };
+
+    if (btnCamera && video) {
+      btnCamera.addEventListener('click', async () => {
+        try {
+          if (placeholder) placeholder.style.display = 'none';
+          if (preview) preview.style.display = 'none';
+          video.style.display = 'block';
+          await window.GeosenseCamera.startCamera(video);
+          if (btnSnap) btnSnap.style.display = 'inline-flex';
+          if (btnReset) btnReset.style.display = 'inline-flex';
+          btnDiagnose.disabled = true;
+        } catch (err) {
+          alert(err.message);
+          video.style.display = 'none';
+          if (placeholder) placeholder.style.display = 'block';
+        }
+      });
+    }
+
+    if (btnSnap) {
+      btnSnap.addEventListener('click', async () => {
+        try {
+          const blob = await window.GeosenseCamera.captureSnapshot();
+          const b64 = window.GeosenseCamera.captureBase64(0.92);
+          window.GeosenseCamera.stopCamera();
+          setDiseaseImage(new File([blob], 'leaf-capture.jpg', { type: 'image/jpeg' }), b64);
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    }
+
+    if (btnUpload) {
+      btnUpload.addEventListener('click', () => fileInput.click());
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      window.GeosenseCamera.stopCamera();
+      const reader = new FileReader();
+      reader.onload = (ev) => setDiseaseImage(f, ev.target.result);
+      reader.readAsDataURL(f);
+    });
+
+    if (btnReset) {
+      btnReset.addEventListener('click', () => {
+        window.GeosenseCamera.stopCamera();
+        activeDiseaseBlob = null;
+        activeDiseaseThumbUrl = '';
+        if (video) video.style.display = 'none';
+        if (preview) {
+          preview.style.display = 'none';
+          preview.src = '';
+        }
+        if (placeholder) placeholder.style.display = 'block';
+        if (btnSnap) btnSnap.style.display = 'none';
+        btnReset.style.display = 'none';
+        btnDiagnose.disabled = true;
+        fileInput.value = '';
+        if (resultBox) resultBox.innerHTML = '';
+      });
+    }
+
+    btnDiagnose.addEventListener('click', async () => {
+      if (!activeDiseaseBlob) return;
+      const i18n = window.GeosenseI18n;
+      const langCode = i18n ? i18n.getLanguage() : 'en';
+      const origText = btnDiagnose.textContent;
+      btnDiagnose.disabled = true;
+      btnDiagnose.textContent = 'Analyzing Infection & Weather Triggers...';
+
+      try {
+        const aiClient = window.GeosenseAiClient;
+        const loc = window._geosenseLastLocation;
+        const cropName = (latestFarmContext.crop && latestFarmContext.crop.primary_recommendation) || 'Rice';
+        const weatherOpt = latestFarmContext.weather ? {
+          temp: latestFarmContext.weather.temperature,
+          humidity: latestFarmContext.weather.humidity,
+          location: latestFarmContext.weather.location || ''
+        } : null;
+
+        const res = await aiClient.diagnoseDisease(activeDiseaseBlob, {
+          lang: langCode,
+          question: qInput ? qInput.value.trim() : '',
+          crop: cropName,
+          lat: loc ? loc.lat : null,
+          lon: loc ? loc.lon : null,
+          weather: weatherOpt
+        });
+
+        latestFarmContext.diseaseDiagnosis = res;
+        if (res.npk_crosscheck) {
+          latestFarmContext.soil = {
+            ...(latestFarmContext.soil || {}),
+            nitrogen_ppm: res.npk_crosscheck.nitrogen,
+            phosphorus_ppm: res.npk_crosscheck.phosphorus,
+            potassium_ppm: res.npk_crosscheck.potassium
+          };
+        }
+
+        const cat = (res.status_category || 'Infected').toLowerCase();
+        const confPct = `${Math.round((res.confidence || 0) * 100)}%`;
+        const t = (key, fb) => (i18n ? i18n.t(key, fb) : fb);
+        const sol = res.solution_to_fix || res.immediate_solution || {};
+        const immItems = (sol.immediate_field_action || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+        const orgItems = (sol.organic_cultural || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+        const chemItems = (sol.chemical_targeted || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+        const prevItems = (res.prevention || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+
+        const obsLine = res.observed_symptoms
+          ? `<div style="margin-top:8px;padding:7px 10px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:0.82rem;color:#14532d;">👁️ ${escapeHtml(res.observed_symptoms)}</div>`
+          : '';
+        const npkLine = res.npk_crosscheck
+          ? `<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.82rem;color:#334155;">🧪 ${escapeHtml(res.npk_crosscheck.note || '')}</div>`
+          : '';
+
+        resultBox.innerHTML = `
+          <div class="disease-liquid-glass">
+            <div class="disease-result-grid">
+              <div class="disease-preview-card">
+                ${activeDiseaseThumbUrl ? `<img src="${activeDiseaseThumbUrl}" alt="Scanned Leaf" />` : ''}
+                <div style="font-size:0.78rem;color:#475569;line-height:1.45;">
+                  <strong>${escapeHtml(res.inference_engine || 'OpenCV + ONNX + ICAR')}</strong><br>
+                  <span style="color:#64748b;">${escapeHtml(res.model_source || '')}</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px;">
+                  ${(res.farm_context_chips || []).map(c => `<span class="chat-metric-chip">${escapeHtml(String(c))}</span>`).join('')}
+                </div>
+                <button type="button" id="btn-disease-followup-geo" class="btn-geo-primary" style="width:100%;font-size:0.84rem;padding:9px 12px;">
+                  ${escapeHtml(t('disease.btn_followup', '🤖 Ask Follow-up in AI Agro Assistant'))}
+                </button>
+              </div>
+
+              <div class="disease-cards-stack">
+                <div class="disease-section-card">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                    <h5>🩺 ${escapeHtml(t('disease.card_detected', 'Detected Infection & Confidence'))}</h5>
+                    <span class="disease-conf-badge ${escapeHtml(cat)}">${escapeHtml(res.status_category)} • ${confPct}</span>
+                  </div>
+                  <div style="font-size:1.12rem;font-weight:700;color:#0b1d3a;">${escapeHtml(res.disease_name || res.condition_name)}</div>
+                  <div style="font-size:0.86rem;color:#475569;margin-top:2px;">${escapeHtml(res.pathogen_or_cause || res.pathogen_type)}</div>
+                  ${obsLine}
+                  ${npkLine}
+                </div>
+
+                <div class="disease-section-card">
+                  <h5>🔬 ${escapeHtml(t('disease.card_why', 'Why It Is Infected (Biology & Live Weather Trigger)'))}</h5>
+                  <p style="font-size:0.9rem;color:#334155;margin:0;white-space:pre-line;">${escapeHtml(res.why_infected)}</p>
+                </div>
+
+                <div class="disease-section-card">
+                  <h5>💊 ${escapeHtml(t('disease.card_solution', 'Recommended Solution & Dosage'))}</h5>
+                  <div class="disease-sol-tabs">
+                    <button type="button" class="disease-sol-tab active" data-sol-tab="organic">${escapeHtml(t('disease.tab_organic', '🌿 Organic / Cultural Control'))}</button>
+                    <button type="button" class="disease-sol-tab" data-sol-tab="chemical">${escapeHtml(t('disease.tab_chemical', '🧪 Targeted Chemical Control (ICAR)'))}</button>
+                    <button type="button" class="disease-sol-tab" data-sol-tab="immediate">✂️ Immediate Field Action</button>
+                  </div>
+                  <div id="disease-tab-panel-organic" style="font-size:0.89rem;color:#1e293b;">
+                    <ul style="padding-left:18px;margin:0;">${orgItems}</ul>
+                  </div>
+                  <div id="disease-tab-panel-chemical" style="display:none;font-size:0.89rem;color:#1e293b;">
+                    <ul style="padding-left:18px;margin:0;">${chemItems}</ul>
+                    ${sol.spray_notes ? `<div style="margin-top:8px;font-size:0.82rem;color:#0369a1;background:#eff6ff;padding:7px 10px;border-radius:8px;">ℹ️ ${escapeHtml(sol.spray_notes)}</div>` : ''}
+                  </div>
+                  <div id="disease-tab-panel-immediate" style="display:none;font-size:0.89rem;color:#1e293b;">
+                    <ul style="padding-left:18px;margin:0;">${immItems || orgItems}</ul>
+                  </div>
+                  ${prevItems ? `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #cbd5e1;"><strong style="font-size:0.84rem;color:#0b1d3a;">🛡️ ${escapeHtml(t('disease.card_prevention', 'Prevention Measures'))}</strong><ul style="padding-left:18px;margin:4px 0 0;font-size:0.86rem;color:#475569;">${prevItems}</ul></div>` : ''}
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:14px;padding:10px 14px;background:rgba(239,246,255,0.9);border-left:4px solid #3b82f6;border-radius:8px;font-size:0.8rem;color:#1e3a8a;">
+              ${escapeHtml(res.scientific_disclaimer || '')}
+            </div>
+          </div>
+        `;
+
+        // Wire Immediate / Organic / Chemical solution tabs
+        const tabBtns = resultBox.querySelectorAll('.disease-sol-tab');
+        const immPanel = document.getElementById('disease-tab-panel-immediate');
+        const orgPanel = document.getElementById('disease-tab-panel-organic');
+        const chemPanel = document.getElementById('disease-tab-panel-chemical');
+        tabBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const which = btn.getAttribute('data-sol-tab');
+            if (immPanel) immPanel.style.display = which === 'immediate' ? 'block' : 'none';
+            if (orgPanel) orgPanel.style.display = which === 'organic' ? 'block' : 'none';
+            if (chemPanel) chemPanel.style.display = which === 'chemical' ? 'block' : 'none';
+          });
+        });
+
+        // Wire "Ask Follow-up in AI Agro Assistant" button
+        const followupBtn = document.getElementById('btn-disease-followup-geo');
+        if (followupBtn) {
+          followupBtn.addEventListener('click', () => {
+            pushDiagnosisToAssistant(res, activeDiseaseThumbUrl);
+          });
+        }
+      } catch (err) {
+        alert('Disease scan error: ' + (err.message || err));
+      } finally {
+        btnDiagnose.disabled = false;
+        btnDiagnose.textContent = origText;
+      }
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -668,12 +1164,18 @@
     if (searchBtn && searchInput) {
       searchBtn.addEventListener('click', () => {
         const q = searchInput.value.trim();
-        if (q) loadWeatherModuleData(q);
+        if (q) {
+          activeWeatherManualQuery = true;
+          loadWeatherModuleData(q);
+        }
       });
       searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const q = searchInput.value.trim();
-          if (q) loadWeatherModuleData(q);
+          if (q) {
+            activeWeatherManualQuery = true;
+            loadWeatherModuleData(q);
+          }
         }
       });
     }
@@ -682,30 +1184,25 @@
       gpsBtn.addEventListener('click', () => {
         gpsBtn.disabled = true;
         gpsBtn.innerHTML = '<span>⏳ Acquiring GPS...</span>';
+        activeWeatherManualQuery = false;
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               gpsBtn.disabled = false;
               gpsBtn.innerHTML = '<span>📍 Live GPS Active</span>';
               gpsBtn.style.background = '#dcfce7';
-              const lat = parseFloat(pos.coords.latitude.toFixed(4));
-              const lon = parseFloat(pos.coords.longitude.toFixed(4));
-              const coords = {
-                lat,
-                lon,
-                name: 'Live GPS Farm'
-              };
-              if (window.FarmMap) {
-                window.FarmMap.setCoordinates(lat, lon);
-              }
-              loadWeatherModuleData(null, coords);
+              const lat = parseFloat(pos.coords.latitude.toFixed(5));
+              const lon = parseFloat(pos.coords.longitude.toFixed(5));
+              saveActiveLocation(lat, lon, '', true);
+              loadWeatherModuleData(null, { lat, lon, name: '' });
+              loadDashboardOverview(lat, lon);
             },
             (err) => {
               gpsBtn.disabled = false;
               gpsBtn.innerHTML = '<span>📍 Detect My Live GPS</span>';
               alert('Could not access GPS (' + (err.message || 'Permission denied') + '). Please ensure location permission is allowed.');
             },
-            { timeout: 8000, enableHighAccuracy: true }
+            { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 }
           );
         } else {
           gpsBtn.disabled = false;
@@ -713,25 +1210,6 @@
           alert('Geolocation is not supported by your browser.');
         }
       });
-    }
-
-    // Auto-attempt GPS on first load of weather module
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = parseFloat(pos.coords.latitude.toFixed(4));
-          const lon = parseFloat(pos.coords.longitude.toFixed(4));
-          if (window.FarmMap) window.FarmMap.setCoordinates(lat, lon);
-          loadWeatherModuleData(null, { lat, lon, name: 'Live GPS Farm' });
-        },
-        () => {
-          // If denied or timed out, load regional auto-detected default
-          loadWeatherModuleData();
-        },
-        { timeout: 5000, enableHighAccuracy: true, maximumAge: 60000 }
-      );
-    } else {
-      loadWeatherModuleData();
     }
   }
 
@@ -792,8 +1270,16 @@
   }
 
   function renderWeatherUI(container, data) {
-    if (window.FarmMap && data.latitude && data.longitude) {
-      window.FarmMap.setCoordinates(data.latitude, data.longitude);
+    if (data.latitude && data.longitude) {
+      saveActiveLocation(data.latitude, data.longitude, data.location_name || '', window._geosenseLastLocation ? window._geosenseLastLocation.isGps : false);
+      if (window.FarmMap) {
+        // Move marker & update HUD without firing a duplicate /weather/current fetch
+        window.FarmMap.setCoordinates(data.latitude, data.longitude, true, data);
+      }
+    }
+    const sourceBadge = document.getElementById('badge-weather-source');
+    if (sourceBadge && data.source) {
+      sourceBadge.textContent = data.source.includes('OpenWeatherMap') ? 'OpenWeatherMap Live' : (data.source.includes('Open-Meteo') ? 'Open-Meteo Live' : data.source);
     }
     container.innerHTML = `
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
@@ -1037,6 +1523,9 @@
     const sendBtn = document.getElementById('dash-btn-chat-send');
     const input = document.getElementById('dash-chat-input');
     const msgBox = document.getElementById('dash-chat-messages');
+    const quickPromptsBox = document.getElementById('dash-chat-quick-prompts');
+    const photoFileInput = document.getElementById('dash-chat-photo-file');
+    const btnChatPhoto = document.getElementById('dash-btn-chat-photo');
 
     const btnCloud = document.getElementById('btn-mode-cloud');
     const btnOffline = document.getElementById('btn-mode-offline');
@@ -1058,15 +1547,59 @@
     const fallbackNotice = document.getElementById('offline-fallback-notice');
 
     const btnSettingsToggle = document.getElementById('btn-ai-settings-toggle');
-    const settingsDrawer = document.getElementById('ai-settings-drawer');
+    const settingsPopover = document.getElementById('ai-settings-popover');
+    const btnClosePopover = document.getElementById('btn-close-ai-popover');
     const inputModelUrl = document.getElementById('input-model-provider-url');
     const btnSaveModelUrl = document.getElementById('btn-save-model-url');
     const btnResetModelUrl = document.getElementById('btn-reset-model-url');
     const saveModelStatus = document.getElementById('save-model-url-status');
 
-    if (!sendBtn || !input) return;
+    if (!sendBtn || !input || !msgBox) return;
 
     const aiClient = window.GeosenseAiClient;
+
+    // Update crop-aware input placeholder, camera title, and 3 quick-prompt chips
+    refreshAssistantPromptUi = () => {
+      const i18n = window.GeosenseI18n;
+      const cropName = (latestFarmContext.crop && latestFarmContext.crop.primary_recommendation)
+        ? latestFarmContext.crop.primary_recommendation
+        : 'Rice';
+
+      const rawPh = i18n
+        ? i18n.t('assistant.placeholder_crop', 'Ask about {crop} nutrients, irrigation, or crop health...')
+        : 'Ask about {crop} nutrients, irrigation, or crop health...';
+      input.placeholder = rawPh.replace(/\{crop\}/g, cropName);
+
+      if (btnChatPhoto && i18n) {
+        btnChatPhoto.title = i18n.t('assistant.scan_btn_title', 'Analyze Leaf or Soil Photo (NPK)');
+      }
+
+      if (quickPromptsBox) {
+        const defaults = [
+          `Best urea split schedule for ${cropName}?`,
+          'Is irrigation needed today?',
+          'How to balance my soil NPK?'
+        ];
+        const prompts = [
+          (i18n ? i18n.t('assistant.prompt_1', defaults[0]) : defaults[0]).replace(/\{crop\}/g, cropName),
+          (i18n ? i18n.t('assistant.prompt_2', defaults[1]) : defaults[1]).replace(/\{crop\}/g, cropName),
+          (i18n ? i18n.t('assistant.prompt_3', defaults[2]) : defaults[2]).replace(/\{crop\}/g, cropName)
+        ];
+
+        quickPromptsBox.innerHTML = '';
+        prompts.forEach((promptText) => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chat-quick-chip';
+          chip.textContent = promptText;
+          chip.addEventListener('click', () => {
+            input.value = promptText;
+            handleSend(promptText);
+          });
+          quickPromptsBox.appendChild(chip);
+        });
+      }
+    };
 
     // Synchronize UI with AiClient State
     function renderAiState(state) {
@@ -1077,21 +1610,24 @@
         if (state.mode === 'cloud') {
           btnCloud.classList.add('active');
           btnOffline.classList.remove('active');
-          if (offlineBanner) offlineBanner.style.display = 'none';
         } else {
           btnCloud.classList.remove('active');
           btnOffline.classList.add('active');
-          if (offlineBanner) offlineBanner.style.display = 'block';
         }
       }
 
-      // WebGPU indicator
+      // Keep offline card visible inside Settings popover in all modes so user can pre-cache weights anytime
+      if (offlineBanner) {
+        offlineBanner.style.display = 'block';
+      }
+
+      // WebGPU indicator pill
       if (webGpuIndicator) {
         if (state.webGpuSupported) {
-          const v = state.webGpuAdapter ? (state.webGpuAdapter.vendor || 'Hardware Accelerated') : 'Active';
-          webGpuIndicator.innerHTML = `<span style="color: #10b981;">●</span> WebGPU: ${v}`;
+          const v = state.webGpuAdapter ? (state.webGpuAdapter.vendor || 'Ready') : 'Ready';
+          webGpuIndicator.innerHTML = `<span style="color: #10b981;">●</span> WebGPU: ${escapeHtml(v)}`;
         } else {
-          webGpuIndicator.innerHTML = `<span style="color: #f59e0b;">●</span> WebGPU: Unsupported (Fallback Engine Active)`;
+          webGpuIndicator.innerHTML = `<span style="color: #f59e0b;">●</span> WebGPU: Fallback`;
         }
       }
 
@@ -1103,20 +1639,20 @@
           statusLabel.textContent = 'Cloud AI: Qwen3 Grounded';
         } else if (state.isGemmaActive) {
           statusBadge.classList.add('gemma');
-          statusLabel.textContent = 'Offline AI: Gemma 4 E2B (WebGPU Active)';
+          statusLabel.textContent = 'Offline AI: Gemma 4 E2B (WebGPU)';
         } else if (state.status === 'offline_downloading') {
           statusBadge.classList.add('downloading');
-          statusLabel.textContent = 'Offline AI: Downloading Weights...';
+          statusLabel.textContent = 'Offline AI: Downloading...';
         } else if (!state.webGpuSupported) {
           statusBadge.classList.add('fallback');
-          statusLabel.textContent = 'Offline AI: Deterministic Engine (WebGPU Unsupported)';
+          statusLabel.textContent = 'Offline AI: Agronomic Engine';
         } else {
           statusBadge.classList.add('fallback');
-          statusLabel.textContent = state.isModelCached ? 'Offline AI: Gemma Cached (Click to Load)' : 'Offline AI: Ready to Download';
+          statusLabel.textContent = state.isModelCached ? 'Offline AI: Gemma Cached' : 'Offline AI: Ready';
         }
       }
 
-      // Offline Banner Details
+      // Offline Banner Details inside Popover
       if (offlineBanner) {
         if (!state.webGpuSupported) {
           offlineBanner.classList.add('unsupported');
@@ -1124,26 +1660,27 @@
           if (btnDownload) btnDownload.style.display = 'none';
           if (btnClearCache) btnClearCache.style.display = 'none';
           if (offlineMeta) {
-            offlineMeta.innerHTML = '<strong>Fallback Engine Active:</strong> Operating 100% offline with deterministic agronomic rules and FAO-56 irrigation calculators. Zero cloud requests.';
+            offlineMeta.innerHTML = '<strong>Fallback Engine Active:</strong> Operating 100% offline with deterministic agronomic rules and FAO-56 irrigation calculators.';
           }
         } else {
           offlineBanner.classList.remove('unsupported');
           if (fallbackNotice) fallbackNotice.style.display = 'none';
 
           if (state.isModelCached) {
-            if (offlineTitle) offlineTitle.textContent = '⚡ Gemma 4 E2B (Cached in Persistent IndexedDB)';
+            if (offlineTitle) offlineTitle.textContent = 'Gemma 4 E2B (Cached in IndexedDB)';
             if (offlineMeta) {
-              offlineMeta.innerHTML = `Model Size: <strong>${state.cachedSizeMB} MB</strong> | Cached: <strong>${new Date(state.downloadedAt).toLocaleDateString()}</strong> | WebGPU Ready`;
+              offlineMeta.innerHTML = `Size: <strong>${state.cachedSizeMB} MB</strong> • Cached ${new Date(state.downloadedAt).toLocaleDateString()} • WebGPU Ready`;
             }
             if (btnDownload) {
+              btnDownload.style.display = 'inline-block';
               btnDownload.textContent = state.isGemmaActive ? 'Gemma 4 E2B Loaded' : 'Initialize WebGPU Worker';
               btnDownload.disabled = state.isGemmaActive;
             }
             if (btnClearCache) btnClearCache.style.display = 'inline-block';
           } else {
-            if (offlineTitle) offlineTitle.textContent = '⚡ On-Device Gemma 4 E2B (LiteRT-LM WebGPU)';
+            if (offlineTitle) offlineTitle.textContent = 'On-Device Gemma 4 E2B (WebGPU)';
             if (offlineMeta) {
-              offlineMeta.innerHTML = `Storage requirement: <strong>~${state.estimatedModelMB} MB</strong> | Memory requirement: <strong>~2.0 GB WebGPU VRAM</strong> | Status: Not downloaded`;
+              offlineMeta.innerHTML = `~${state.estimatedModelMB} MB download • ~2.0 GB WebGPU VRAM • Not cached yet`;
             }
             if (btnDownload) {
               btnDownload.style.display = 'inline-block';
@@ -1224,12 +1761,29 @@
       });
     }
 
-    // Settings Drawer Toggle
-    if (btnSettingsToggle && settingsDrawer) {
-      btnSettingsToggle.addEventListener('click', () => {
-        settingsDrawer.style.display = settingsDrawer.style.display === 'none' ? 'block' : 'none';
+    // Settings Popover Toggle & Outside Click Close
+    if (btnSettingsToggle && settingsPopover) {
+      btnSettingsToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = settingsPopover.style.display === 'block';
+        settingsPopover.style.display = isOpen ? 'none' : 'block';
+        btnSettingsToggle.setAttribute('aria-expanded', String(!isOpen));
       });
     }
+    if (btnClosePopover && settingsPopover) {
+      btnClosePopover.addEventListener('click', () => {
+        settingsPopover.style.display = 'none';
+        if (btnSettingsToggle) btnSettingsToggle.setAttribute('aria-expanded', 'false');
+      });
+    }
+    document.addEventListener('click', (e) => {
+      if (settingsPopover && settingsPopover.style.display === 'block') {
+        if (!settingsPopover.contains(e.target) && (!btnSettingsToggle || !btnSettingsToggle.contains(e.target))) {
+          settingsPopover.style.display = 'none';
+          if (btnSettingsToggle) btnSettingsToggle.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
 
     if (btnSaveModelUrl && inputModelUrl) {
       btnSaveModelUrl.addEventListener('click', () => {
@@ -1257,12 +1811,378 @@
       });
     }
 
-    // Chat Send Handler
-    const handleSend = async () => {
-      const q = input.value.trim();
+    // Helper: Collect sanitized farm context (preserve null/absent fields instead of faking pH)
+    function collectSanitizedFarmContext() {
+      const i18n = window.GeosenseI18n;
+      const langCode = i18n ? i18n.getLanguage() : 'en';
+      const langMeta = i18n && i18n.getLanguageInfo ? i18n.getLanguageInfo(langCode) : null;
+      const loc = window._geosenseLastLocation;
+
+      const context = {
+        language: langCode,
+        languageName: langMeta ? langMeta.english : 'English',
+        lat: loc ? loc.lat : null,
+        lon: loc ? loc.lon : null
+      };
+
+      if (latestFarmContext.soil && (
+        latestFarmContext.soil.nitrogen_ppm !== null && latestFarmContext.soil.nitrogen_ppm !== undefined ||
+        latestFarmContext.soil.phosphorus_ppm !== null && latestFarmContext.soil.phosphorus_ppm !== undefined ||
+        latestFarmContext.soil.potassium_ppm !== null && latestFarmContext.soil.potassium_ppm !== undefined
+      )) {
+        context.soil = {
+          nitrogen_ppm: latestFarmContext.soil.nitrogen_ppm,
+          phosphorus_ppm: latestFarmContext.soil.phosphorus_ppm,
+          potassium_ppm: latestFarmContext.soil.potassium_ppm,
+          soil_ph: latestFarmContext.soil.soil_ph ?? null,
+          moisture_pct: latestFarmContext.soil.moisture_pct ?? null
+        };
+      } else {
+        const parseOpt = (id) => {
+          const el = document.getElementById(id);
+          if (!el || el.value === '') return null;
+          const num = parseFloat(el.value);
+          return Number.isFinite(num) ? num : null;
+        };
+        const nVal = parseOpt('inp-soil-n');
+        const pVal = parseOpt('inp-soil-p');
+        const kVal = parseOpt('inp-soil-k');
+        if (nVal !== null || pVal !== null || kVal !== null) {
+          context.soil = {
+            nitrogen_ppm: nVal,
+            phosphorus_ppm: pVal,
+            potassium_ppm: kVal,
+            soil_ph: parseOpt('inp-soil-ph'),
+            moisture_pct: parseOpt('inp-soil-moisture')
+          };
+        }
+      }
+
+      if (latestFarmContext.crop) {
+        context.crop = latestFarmContext.crop;
+      }
+      if (latestFarmContext.weather) {
+        context.weather = {
+          temp: latestFarmContext.weather.temperature,
+          humidity: latestFarmContext.weather.humidity,
+          location: latestFarmContext.weather.location || null
+        };
+      }
+      if (latestFarmContext.diseaseDiagnosis) {
+        context.diseaseDiagnosis = latestFarmContext.diseaseDiagnosis;
+      }
+      return context;
+    }
+
+    function renderAssistantFooterHtml(res) {
+      const i18n = window.GeosenseI18n;
+      const ctxLabel = i18n ? i18n.t('assistant.context_label', 'Farm Context') : 'Farm Context';
+      const chips = (res && Array.isArray(res.contextChips) && res.contextChips.length > 0)
+        ? res.contextChips
+        : ((res && Array.isArray(res.contextUsed)) ? res.contextUsed : []);
+
+      let html = '';
+      if (chips.length > 0) {
+        html += `<div class="chat-context-chips"><span class="chat-context-label">${escapeHtml(ctxLabel)}</span>${chips.map(c => `<span class="chat-metric-chip">${escapeHtml(String(c))}</span>`).join('')}</div>`;
+      }
+
+      const engineTag = `<span class="data-source-badge ${res.mode === 'cloud' ? 'calc' : 'live'}">${escapeHtml(res.engine || 'Geo AI')}</span>`;
+      if (res.tokensPerSec) {
+        html += `<div class="chat-meta-row">${engineTag} <span class="token-speed-tag">${escapeHtml(String(res.tokensPerSec))} tokens/sec (WebGPU)</span></div>`;
+      } else {
+        html += `<div class="chat-meta-row">${engineTag}</div>`;
+      }
+
+      if (res.scientificDisclaimer) {
+        html += `<div class="chat-disclaimer">${escapeHtml(res.scientificDisclaimer)}</div>`;
+      }
+      return html;
+    }
+
+    // Attachment & Inline Camera Elements in Geo Chat
+    const attachBar = document.getElementById('dash-chat-image-chip');
+    const attachThumb = document.getElementById('dash-chat-attach-thumb');
+    const attachName = document.getElementById('dash-chat-attach-name');
+    const attachModeBtn = document.getElementById('dash-chat-attach-mode');
+    const attachRemoveBtn = document.getElementById('dash-chat-attach-remove');
+    const btnChatCam = document.getElementById('dash-btn-chat-cam');
+    const chatCamStrip = document.getElementById('dash-chat-camera-strip');
+    const chatVideo = document.getElementById('dash-chat-video');
+    const btnChatSnap = document.getElementById('dash-chat-cam-snap');
+    const btnChatCamCancel = document.getElementById('dash-chat-cam-cancel');
+
+    let pendingChatImage = null; // { file, thumbUrl, mode: 'disease' | 'npk' }
+    let chatAttachMode = 'disease';
+
+    function updateAttachModeLabel() {
+      if (!attachModeBtn) return;
+      const i18n = window.GeosenseI18n;
+      attachModeBtn.textContent = chatAttachMode === 'disease'
+        ? (i18n ? i18n.t('assistant.mode_disease', '🩺 Infection Scan') : '🩺 Infection Scan')
+        : (i18n ? i18n.t('assistant.mode_npk', '🧪 Soil NPK') : '🧪 Soil NPK');
+    }
+
+    function clearPendingChatImage() {
+      pendingChatImage = null;
+      if (attachBar) attachBar.style.display = 'none';
+      if (attachThumb) attachThumb.src = '';
+      if (photoFileInput) photoFileInput.value = '';
+    }
+
+    function formatCleanAttachmentLabel(rawName, mode = 'disease') {
+      const i18n = window.GeosenseI18n;
+      const defaultDisease = i18n ? i18n.t('assistant.chat_disease_label', 'Leaf & Crop Infection Scan') : 'Leaf & Crop Infection Scan';
+      const defaultNpk = i18n ? i18n.t('assistant.chat_npk_label', 'Soil & Leaf NPK Scan') : 'Soil & Leaf NPK Scan';
+      const baseLabel = mode === 'npk' ? defaultNpk : defaultDisease;
+
+      const cleaned = String(rawName || '').replace(/\.[^/.]+$/, '').trim();
+      const looksLikeRandomHash = (
+        !cleaned ||
+        cleaned.length > 22 ||
+        /^[A-Za-z0-9_-]{12,}$/.test(cleaned) && /[0-9]/.test(cleaned) && /[A-Z]/.test(cleaned) && /[a-z]/.test(cleaned) ||
+        /^[0-9a-f-]{16,}$/i.test(cleaned) ||
+        /^(whatsapp|img|pxl|dsc|screenshot|image)[_-]?\d+/i.test(cleaned)
+      );
+      if (looksLikeRandomHash) return baseLabel;
+      return `${baseLabel} (${cleaned})`;
+    }
+
+    function stageChatImageAttachment(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const thumbUrl = (ev.target && ev.target.result) || '';
+        pendingChatImage = { file, thumbUrl };
+        if (attachThumb) attachThumb.src = thumbUrl;
+        if (attachName) attachName.textContent = formatCleanAttachmentLabel(file.name, chatAttachMode);
+        updateAttachModeLabel();
+        if (attachBar) attachBar.style.display = 'flex';
+        input.focus();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    if (attachModeBtn) {
+      attachModeBtn.addEventListener('click', () => {
+        chatAttachMode = chatAttachMode === 'disease' ? 'npk' : 'disease';
+        updateAttachModeLabel();
+        if (pendingChatImage && attachName) {
+          attachName.textContent = formatCleanAttachmentLabel(pendingChatImage.file?.name, chatAttachMode);
+        }
+      });
+    }
+    if (attachRemoveBtn) {
+      attachRemoveBtn.addEventListener('click', clearPendingChatImage);
+    }
+
+    // Wire Upload Button, Clipboard Paste, and Inline Camera Capture inside Geo Chat
+    if (btnChatPhoto && photoFileInput) {
+      btnChatPhoto.addEventListener('click', () => photoFileInput.click());
+      photoFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          stageChatImageAttachment(e.target.files[0]);
+        }
+      });
+    }
+
+    input.addEventListener('paste', (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const pastedFile = item.getAsFile();
+          if (pastedFile) {
+            e.preventDefault();
+            stageChatImageAttachment(new File([pastedFile], 'pasted-leaf.png', { type: pastedFile.type || 'image/png' }));
+            break;
+          }
+        }
+      }
+    });
+
+    if (btnChatCam && chatCamStrip && chatVideo) {
+      btnChatCam.addEventListener('click', async () => {
+        try {
+          chatCamStrip.style.display = 'flex';
+          await window.GeosenseCamera.startCamera(chatVideo);
+        } catch (err) {
+          chatCamStrip.style.display = 'none';
+          alert(err.message);
+        }
+      });
+    }
+    if (btnChatCamCancel && chatCamStrip) {
+      btnChatCamCancel.addEventListener('click', () => {
+        window.GeosenseCamera.stopCamera();
+        chatCamStrip.style.display = 'none';
+      });
+    }
+    if (btnChatSnap && chatCamStrip) {
+      btnChatSnap.addEventListener('click', async () => {
+        try {
+          const blob = await window.GeosenseCamera.captureSnapshot();
+          window.GeosenseCamera.stopCamera();
+          chatCamStrip.style.display = 'none';
+          stageChatImageAttachment(new File([blob], 'camera-leaf.jpg', { type: 'image/jpeg' }));
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    }
+
+    // Push result directly from "#pane-disease" into Geo chat for follow-up Q&A
+    pushDiagnosisToAssistant = (diagRes, thumbUrl = '') => {
+      if (!diagRes) return;
+      latestFarmContext.diseaseDiagnosis = diagRes;
+      const assistantNavBtn = document.querySelector('.sidebar-nav .nav-item[data-target="assistant"]');
+      if (assistantNavBtn) assistantNavBtn.click();
+
+      if (thumbUrl) {
+        appendChatBubble(
+          `<div style="display:flex;flex-direction:column;gap:8px;"><img src="${thumbUrl}" alt="Scanned Leaf" style="max-width:210px;max-height:160px;border-radius:10px;object-fit:cover;border:1px solid rgba(255,255,255,0.35);"><span style="font-size:0.84rem;">🩺 Follow-up Diagnosis Transfer</span></div>`,
+          'user'
+        );
+      }
+      const mdReport = renderDiagnosisMarkdownReport(diagRes);
+      const footer = renderAssistantFooterHtml({
+        mode: 'cloud',
+        engine: diagRes.inference_engine || 'ONNX + ICAR Pathology',
+        contextChips: diagRes.farm_context_chips || [diagRes.condition_name],
+        scientificDisclaimer: diagRes.scientific_disclaimer
+      });
+      appendChatBubble(formatMarkdownText(mdReport) + footer, 'assistant');
+      input.focus();
+    };
+
+    // Analyze Staged Chat Photo (Disease Diagnosis OR Soil NPK Scan)
+    async function processStagedChatImage(attached, userText) {
+      const cleanLabel = formatCleanAttachmentLabel(attached.file.name, chatAttachMode);
+      const safeLabel = escapeHtml(cleanLabel);
+      const userCaption = userText ? `${escapeHtml(userText)}<br><small style="opacity:0.85;">${safeLabel}</small>` : safeLabel;
+      const userThumbHtml = attached.thumbUrl
+        ? `<div style="display:flex;flex-direction:column;gap:8px;"><img src="${attached.thumbUrl}" alt="${safeLabel}" style="max-width:220px;max-height:170px;border-radius:10px;object-fit:cover;border:1px solid rgba(255,255,255,0.35);"><span style="font-size:0.84rem;">${userCaption}</span></div>`
+        : userCaption;
+      appendChatBubble(userThumbHtml, 'user');
+
+      const loadingMsg = chatAttachMode === 'npk'
+        ? 'Analyzing photo for Soil / Leaf Nitrogen, Phosphorus & Potassium...'
+        : 'Running PlantVillage ONNX + NPK Cross-Check + ICAR Disease Diagnosis...';
+      const loadingBubble = appendChatBubble(loadingMsg, 'assistant loading');
+      sendBtn.disabled = true;
+
+      try {
+        const i18n = window.GeosenseI18n;
+        const langCode = i18n ? i18n.getLanguage() : 'en';
+        const loc = window._geosenseLastLocation;
+        const cropName = (latestFarmContext.crop && latestFarmContext.crop.primary_recommendation) || 'Rice';
+        const currentState = aiClient ? aiClient.getState() : { mode: 'cloud' };
+
+        if (chatAttachMode === 'npk') {
+          let npk = null;
+          let engineName = 'Geosense NPK Vision ONNX';
+          let scanMode = 'cloud';
+          if (currentState.mode !== 'offline' && window.GeosenseApi && window.GeosenseApi.predictSoilNPK) {
+            try {
+              npk = await window.GeosenseApi.predictSoilNPK(attached.file);
+            } catch (apiErr) {
+              if (aiClient && aiClient.estimateNpkOffline) {
+                npk = await aiClient.estimateNpkOffline(attached.file);
+                engineName = npk.inference_engine || 'Offline Heuristic';
+                scanMode = 'offline';
+              } else {
+                throw apiErr;
+              }
+            }
+          } else if (aiClient && aiClient.estimateNpkOffline) {
+            npk = await aiClient.estimateNpkOffline(attached.file);
+            engineName = npk.inference_engine || 'Offline Heuristic';
+            scanMode = 'offline';
+          }
+
+          if (loadingBubble.parentNode) loadingBubble.remove();
+          const nVal = Number(npk.nitrogen).toFixed(1);
+          const pVal = Number(npk.phosphorus).toFixed(1);
+          const kVal = Number(npk.potassium).toFixed(1);
+          const st = npk.status || {};
+          latestFarmContext.soil = {
+            ...(latestFarmContext.soil || {}),
+            nitrogen_ppm: parseFloat(nVal),
+            phosphorus_ppm: parseFloat(pVal),
+            potassium_ppm: parseFloat(kVal),
+            soil_ph: (latestFarmContext.soil && latestFarmContext.soil.soil_ph !== undefined) ? latestFarmContext.soil.soil_ph : null
+          };
+          refreshAssistantPromptUi();
+          const mdReport = [
+            `### Photo NPK Scan Results (${cropName} Context)`,
+            `| Nutrient | Estimated Level | Status |`,
+            `| --- | --- | --- |`,
+            `| Nitrogen (N) | ${nVal} kg/ha | ${st.N || 'Analyzed'} |`,
+            `| Phosphorus (P) | ${pVal} kg/ha | ${st.P || 'Analyzed'} |`,
+            `| Potassium (K) | ${kVal} kg/ha | ${st.K || 'Analyzed'} |`
+          ].join('\n');
+          const footer = renderAssistantFooterHtml({
+            mode: scanMode,
+            engine: engineName,
+            contextChips: [`N: ${nVal} kg/ha`, `P: ${pVal} kg/ha`, `K: ${kVal} kg/ha`, cropName],
+            scientificDisclaimer: npk.scientific_disclaimer
+          });
+          appendChatBubble(formatMarkdownText(mdReport) + footer, 'assistant');
+        } else {
+          const weatherOpt = latestFarmContext.weather ? {
+            temp: latestFarmContext.weather.temperature,
+            humidity: latestFarmContext.weather.humidity,
+            location: latestFarmContext.weather.location || ''
+          } : null;
+
+          const diag = await aiClient.diagnoseDisease(attached.file, {
+            lang: langCode,
+            question: userText,
+            crop: cropName,
+            lat: loc ? loc.lat : null,
+            lon: loc ? loc.lon : null,
+            weather: weatherOpt
+          });
+          if (loadingBubble.parentNode) loadingBubble.remove();
+
+          latestFarmContext.diseaseDiagnosis = diag;
+          if (diag.npk_crosscheck) {
+            latestFarmContext.soil = {
+              ...(latestFarmContext.soil || {}),
+              nitrogen_ppm: diag.npk_crosscheck.nitrogen,
+              phosphorus_ppm: diag.npk_crosscheck.phosphorus,
+              potassium_ppm: diag.npk_crosscheck.potassium
+            };
+          }
+          const mdReport = renderDiagnosisMarkdownReport(diag);
+          const footer = renderAssistantFooterHtml({
+            mode: currentState.mode === 'offline' ? 'offline' : 'cloud',
+            engine: diag.inference_engine || 'ONNX + ICAR Pathology',
+            contextChips: diag.farm_context_chips || [diag.condition_name, cropName],
+            scientificDisclaimer: diag.scientific_disclaimer
+          });
+          appendChatBubble(formatMarkdownText(mdReport) + footer, 'assistant');
+        }
+      } catch (err) {
+        if (loadingBubble.parentNode) loadingBubble.remove();
+        appendChatBubble(`Could not analyze photo: ${escapeHtml(err.message)}`, 'assistant');
+      } finally {
+        sendBtn.disabled = false;
+        msgBox.scrollTop = msgBox.scrollHeight;
+      }
+    }
+
+    // Chat Send Handler (handles text OR staged image + optional text)
+    const handleSend = async (overrideQuery = null) => {
+      const q = (typeof overrideQuery === 'string' ? overrideQuery : input.value).trim();
+      if (pendingChatImage && typeof overrideQuery !== 'string') {
+        const attached = pendingChatImage;
+        clearPendingChatImage();
+        input.value = '';
+        await processStagedChatImage(attached, q);
+        return;
+      }
       if (!q) return;
 
-      appendChatBubble(q, 'user');
+      appendChatBubble(escapeHtml(q), 'user');
       input.value = '';
       sendBtn.disabled = true;
 
@@ -1273,31 +2193,19 @@
         ? (currentState.isGemmaActive ? 'Running Gemma 4 E2B on WebGPU (Local)...' : 'Evaluating offline agronomic knowledge base (Local)...')
         : 'Consulting Qwen3 cloud agronomy assistant...';
 
-      const loadingBubble = appendChatBubble(loadingText, 'assistant loading');
+      const loadingBubble = appendChatBubble(escapeHtml(loadingText), 'assistant loading');
 
       try {
-        // Collect latest local context from DOM/state for grounded offline inference
-        const context = {
-          language: window.GeosenseI18n ? window.GeosenseI18n.getLanguage() : 'en'
-        };
-        const soilN = document.getElementById('soil-val-nitrogen');
-        if (soilN) {
-          context.soil = {
-            nitrogen_ppm: parseFloat(soilN.textContent) || 88.5,
-            phosphorus_ppm: parseFloat(document.getElementById('soil-val-phosphorus')?.textContent) || 45.0,
-            potassium_ppm: parseFloat(document.getElementById('soil-val-potassium')?.textContent) || 72.0,
-            soil_ph: parseFloat(document.getElementById('soil-val-ph')?.textContent) || 6.8,
-            moisture_pct: 48.0
-          };
-        }
+        const context = collectSanitizedFarmContext();
 
         let streamingBubble = null;
         const onTokenCallback = (chunk, accumulated) => {
+          const liveHtml = formatMarkdownText(accumulated);
           if (!streamingBubble) {
             loadingBubble.remove();
-            streamingBubble = appendChatBubble(accumulated, 'assistant');
+            streamingBubble = appendChatBubble(liveHtml, 'assistant');
           } else {
-            streamingBubble.innerHTML = accumulated;
+            streamingBubble.innerHTML = liveHtml;
             msgBox.scrollTop = msgBox.scrollHeight;
           }
         };
@@ -1306,37 +2214,20 @@
 
         if (loadingBubble.parentNode) loadingBubble.remove();
 
-        const rawAnswer = (res && res.answer && res.answer.trim()) 
-          ? res.answer.trim() 
-          : "I have processed your query against Geosense agronomic knowledge models. Please let me know your specific crop, soil NPK values, or irrigation questions.";
+        const rawAnswer = (res && res.answer && res.answer.trim())
+          ? res.answer.trim()
+          : 'Processed your farm query. Please share your specific crop, soil NPK readings, or irrigation stage for tailored guidance.';
 
-        let formattedReply = formatMarkdownText(rawAnswer);
-
-        if (res.contextUsed && res.contextUsed.length > 0) {
-          formattedReply += `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.12); font-size: 0.80rem; color: #475569;"><strong>🌾 Farm Context Referenced:</strong> ${res.contextUsed.join(' • ')}</div>`;
-        }
-
-        // Engine attribution tag
-        const engineTag = `<span class="data-source-badge ${res.mode === 'cloud' ? 'calc' : 'live'}" style="margin-top: 8px; display: inline-flex;">${res.engine || 'Geo AI'}</span>`;
-        if (res.tokensPerSec) {
-          formattedReply += `<div style="margin-top: 6px;">${engineTag} <span class="token-speed-tag">${res.tokensPerSec} tokens/sec (WebGPU)</span></div>`;
-        } else {
-          formattedReply += `<div style="margin-top: 6px;">${engineTag}</div>`;
-        }
-
-        if (res.scientificDisclaimer) {
-          formattedReply += `<div style="color: #94a3b8; font-size: 0.72rem; margin-top: 6px; line-height: 1.4;">${res.scientificDisclaimer}</div>`;
-        }
+        const formattedReply = formatMarkdownText(rawAnswer) + renderAssistantFooterHtml(res || {});
 
         if (streamingBubble) {
           streamingBubble.innerHTML = formattedReply;
         } else {
           appendChatBubble(formattedReply, 'assistant');
         }
-
       } catch (err) {
         if (loadingBubble.parentNode) loadingBubble.remove();
-        appendChatBubble(`Encountered an issue with the AI assistant: ${err.message}`, 'assistant');
+        appendChatBubble(`Encountered an issue with the AI assistant: ${escapeHtml(err.message)}`, 'assistant');
       } finally {
         sendBtn.disabled = false;
         msgBox.scrollTop = msgBox.scrollHeight;
@@ -1345,21 +2236,101 @@
 
     function formatMarkdownText(txt) {
       if (!txt) return '';
-      return txt
+      const escaped = String(txt)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/\n\n/g, '<br><br>')
-        .replace(/\n• /g, '<br>• ')
-        .replace(/\n(\d+)\. /g, '<br><strong>$1.</strong> ')
-        .replace(/\n/g, '<br>');
+        .replace(/>/g, '&gt;');
+
+      const inlineFmt = (s) => s
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+      const lines = escaped.replace(/\r\n/g, '\n').split('\n');
+      const out = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Markdown table block
+        if (
+          line.trim().startsWith('|') &&
+          i + 1 < lines.length &&
+          /^\s*\|[\s:\-\|]+\|\s*$/.test(lines[i + 1])
+        ) {
+          const parseRow = (rowStr) =>
+            rowStr.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => inlineFmt(c.trim()));
+          const headers = parseRow(line);
+          i += 2;
+          const rows = [];
+          while (i < lines.length && lines[i].trim().startsWith('|')) {
+            rows.push(parseRow(lines[i]));
+            i++;
+          }
+          const thHtml = headers.map(h => `<th>${h}</th>`).join('');
+          const trHtml = rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
+          out.push(`<table class="chat-md-table"><thead><tr>${thHtml}</tr></thead><tbody>${trHtml}</tbody></table>`);
+          continue;
+        }
+
+        // Headings
+        const h3 = line.match(/^###\s+(.+)$/);
+        if (h3) {
+          out.push(`<h4>${inlineFmt(h3[1])}</h4>`);
+          i++;
+          continue;
+        }
+        const h2 = line.match(/^#{1,2}\s+(.+)$/);
+        if (h2) {
+          out.push(`<h3>${inlineFmt(h2[1])}</h3>`);
+          i++;
+          continue;
+        }
+
+        // Unordered list block (-, *, •)
+        if (/^\s*[-*•]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*[-*•]\s+/.test(lines[i])) {
+            items.push(`<li>${inlineFmt(lines[i].replace(/^\s*[-*•]\s+/, ''))}</li>`);
+            i++;
+          }
+          out.push(`<ul>${items.join('')}</ul>`);
+          continue;
+        }
+
+        // Ordered list block
+        if (/^\s*\d+\.\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+            items.push(`<li>${inlineFmt(lines[i].replace(/^\s*\d+\.\s+/, ''))}</li>`);
+            i++;
+          }
+          out.push(`<ol>${items.join('')}</ol>`);
+          continue;
+        }
+
+        // Blank line -> paragraph spacer
+        if (!line.trim()) {
+          out.push('<div class="chat-spacer"></div>');
+          i++;
+          continue;
+        }
+
+        // Normal paragraph line
+        out.push(`<p>${inlineFmt(line)}</p>`);
+        i++;
+      }
+
+      return out.join('');
     }
 
-    sendBtn.addEventListener('click', handleSend);
+    sendBtn.addEventListener('click', () => handleSend());
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleSend();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
     });
 
     function appendChatBubble(text, senderClass) {
@@ -1370,6 +2341,9 @@
       msgBox.scrollTop = msgBox.scrollHeight;
       return b;
     }
+
+    // Populate crop-aware placeholder & quick prompts immediately on mount
+    refreshAssistantPromptUi();
   }
 
   // --------------------------------------------------------------------------

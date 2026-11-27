@@ -144,6 +144,20 @@ def init_local_database():
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS disease_scans (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        condition_name TEXT NOT NULL,
+        pathogen_or_cause TEXT NOT NULL,
+        status_category TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        why_infected TEXT NOT NULL,
+        solution_json TEXT NOT NULL,
+        npk_crosscheck_json TEXT,
+        detected_language TEXT NOT NULL DEFAULT 'en',
+        created_at TEXT NOT NULL
+    );
     """)
 
     conn.commit()

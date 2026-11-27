@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.api.api_router import api_router
+from app.api.endpoints.disease import router as disease_alias_router
+from app.services.disease_inference_service import DiseaseInferenceService
 
 # Configure logging
 logging.basicConfig(
@@ -37,8 +39,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Modular Routers
+# Mount Modular Routers (/api/v1/... and direct /api/diagnose-disease alias)
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(disease_alias_router, prefix="/api", tags=["Module 9 Alias: Crop Infection & Disease Scanner"])
+
+
+@app.on_event("startup")
+async def _ensure_disease_model_startup():
+    """Ensures disease_model.onnx is ready on first startup if missing."""
+    try:
+        DiseaseInferenceService.ensure_model_downloaded()
+    except Exception as exc:
+        logger.warning(f"Startup disease ONNX download deferred ({exc})")
 
 @app.get("/health", tags=["Health"])
 async def health_check():

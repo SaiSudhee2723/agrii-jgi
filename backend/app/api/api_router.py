@@ -9,7 +9,8 @@ from app.api.endpoints import (
     auth,
     overview,
     assistant,
-    farms
+    farms,
+    disease
 )
 
 api_router = APIRouter()
@@ -24,3 +25,4 @@ api_router.include_router(market.router, prefix="/market", tags=["Module 5: Mark
 api_router.include_router(community.router, prefix="/community", tags=["Module 6: Community & Discussions"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Module 7: User Authentication & Profiles"])
 api_router.include_router(assistant.router, prefix="/assistant", tags=["Module 8: AI Agro Assistant"])
+api_router.include_router(disease.router, tags=["Module 9: Crop Infection & Disease Scanner"])

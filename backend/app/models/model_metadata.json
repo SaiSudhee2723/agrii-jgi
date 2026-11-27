@@ -1,0 +1,42 @@
+{
+  "model_source": "real_dataset",
+  "threshold_standard": "ICAR Soil Health Card (kg/ha)",
+  "backbone": "mobilenetv3_large_100",
+  "img_size": 224,
+  "hist_dim": 54,
+  "outputs": [
+    "N",
+    "P",
+    "K"
+  ],
+  "units": "kg/ha",
+  "train_samples": 3716,
+  "val_samples": 862,
+  "thresholds": {
+    "N": {
+      "low_lt": 280.0,
+      "high_gt": 460.0
+    },
+    "P": {
+      "low_lt": 10.0,
+      "high_gt": 30.0
+    },
+    "K": {
+      "low_lt": 120.0,
+      "high_gt": 280.0
+    }
+  },
+  "best_metrics": {
+    "best_epoch": 26,
+    "val_loss": 0.0432,
+    "mae_N": 9.57,
+    "mae_P": 0.8,
+    "mae_K": 7.31,
+    "mean_mae": 5.89,
+    "cls_acc_N": 98.72,
+    "cls_acc_P": 99.19,
+    "cls_acc_K": 98.26,
+    "mean_cls_acc": 98.72
+  },
+  "trained_at": "2026-11-27T12:41:21Z"
+}

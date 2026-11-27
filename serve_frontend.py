@@ -18,6 +18,10 @@ class GeosenseHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         # Clean URLs support
         parsed_path = self.path.split('?')[0].rstrip('/')
+        if parsed_path == '/favicon.ico' and not os.path.exists(os.path.join(DIRECTORY, 'favicon.ico')):
+            self.send_response(204)
+            self.end_headers()
+            return
         if parsed_path == '':
             self.path = '/index.html'
         elif parsed_path == '/login':

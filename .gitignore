@@ -1,6 +1,12 @@
 # Python & Virtual Environments
 venv/
 backend/venv/
+ml_npk/venv/
+ml_npk/checkpoints/
+ml_npk/raw_datasets/
+ml_npk/data/images/
+ml_npk/data/labels.csv
+ml_npk/data/val_labels.csv
 env/
 .venv/
 ENV/

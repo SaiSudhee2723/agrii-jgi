@@ -31,6 +31,26 @@ class SoilAnalysisReport(BaseModel):
     raw_details: Dict[str, Any] = {}
     created_at: Optional[str] = None
 
+class NPKStatusMap(BaseModel):
+    N: str = Field(..., description="Low | Optimal | High")
+    P: str = Field(..., description="Low | Optimal | High")
+    K: str = Field(..., description="Low | Optimal | High")
+
+
+class NPKPredictionResponse(BaseModel):
+    nitrogen: float
+    phosphorus: float
+    potassium: float
+    status: NPKStatusMap
+    id: Optional[str] = None
+    model_source: str = "real_dataset"
+    inference_engine: str = "ONNX Runtime (npk_model.onnx)"
+    quality_metrics: Optional[ImageQualityMetrics] = None
+    recommendations: List[str] = []
+    scientific_disclaimer: str
+    created_at: Optional[str] = None
+
+
 class ManualSoilTestCreate(BaseModel):
     nitrogen: float = Field(..., ge=0, le=500, description="Nitrogen measurement in kg/ha or mg/kg")
     phosphorus: float = Field(..., ge=0, le=300, description="Phosphorus measurement in kg/ha or mg/kg")

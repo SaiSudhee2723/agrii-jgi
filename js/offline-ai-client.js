@@ -273,36 +273,120 @@
       });
     }
 
+    buildSanitizedContext(context = {}, lang = 'en') {
+      const clean = {};
+      const soil = context.soil || {};
+      const cleanSoil = {};
+      const chips = [];
+
+      const cropName = (context.crop && (context.crop.primary_recommendation || context.crop.primary_crop)) || 'Rice';
+      clean.crop = { primary_recommendation: cropName };
+      chips.push(cropName);
+      if (context.diseaseDiagnosis && context.diseaseDiagnosis.condition_name) {
+        clean.diseaseDiagnosis = context.diseaseDiagnosis;
+        chips.push(context.diseaseDiagnosis.condition_name);
+      }
+
+      const hasVal = (v) => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
+      if (hasVal(soil.nitrogen_ppm)) {
+        cleanSoil.nitrogen_ppm = Number(soil.nitrogen_ppm);
+        chips.push(`N: ${cleanSoil.nitrogen_ppm} kg/ha`);
+      }
+      if (hasVal(soil.phosphorus_ppm)) {
+        cleanSoil.phosphorus_ppm = Number(soil.phosphorus_ppm);
+        chips.push(`P: ${cleanSoil.phosphorus_ppm} kg/ha`);
+      }
+      if (hasVal(soil.potassium_ppm)) {
+        cleanSoil.potassium_ppm = Number(soil.potassium_ppm);
+        chips.push(`K: ${cleanSoil.potassium_ppm} kg/ha`);
+      }
+      if (hasVal(soil.soil_ph)) {
+        cleanSoil.soil_ph = Number(soil.soil_ph);
+        chips.push(`pH: ${cleanSoil.soil_ph}`);
+      } else if (Object.keys(cleanSoil).length > 0) {
+        const phLabel = window.GeosenseI18n ? window.GeosenseI18n.t('assistant.ph_not_tested') : 'pH: Not tested';
+        chips.push(phLabel);
+      }
+      if (hasVal(soil.moisture_pct)) cleanSoil.moisture_pct = Number(soil.moisture_pct);
+      if (Object.keys(cleanSoil).length > 0) clean.soil = cleanSoil;
+
+      if (context.weather && hasVal(context.weather.temp)) {
+        clean.weather = {
+          temp: Number(context.weather.temp),
+          humidity: hasVal(context.weather.humidity) ? Number(context.weather.humidity) : undefined,
+          location: context.weather.location || undefined
+        };
+        chips.push(`${clean.weather.temp}°C`);
+        if (clean.weather.location) chips.push(clean.weather.location);
+      }
+
+      return { sanitizedContext: clean, contextChips: chips };
+    }
+
+    buildLocalizedSystemPrompt(langCode, cleanContext) {
+      const langInfo = (window.GeosenseI18n && window.GeosenseI18n.getLanguageInfo)
+        ? window.GeosenseI18n.getLanguageInfo(langCode)
+        : { code: 'en', name: 'English', scriptInstruction: 'Answer in clear natural English.' };
+      const diagNote = (cleanContext && cleanContext.diseaseDiagnosis && cleanContext.diseaseDiagnosis.condition_name)
+        ? `\nACTIVE DISEASE DIAGNOSIS: ${cleanContext.diseaseDiagnosis.condition_name} (${cleanContext.diseaseDiagnosis.pathogen_or_cause || ''}). Use its chemical/organic spray dosages for 15L tank follow-ups.`
+        : '';
+      return (
+        `You are Geo, Geosense's AI Agronomy Assistant running on-device via Gemma 4 E2B.\n` +
+        `TARGET LANGUAGE: ${langInfo.name} (${langInfo.code}).\n` +
+        `MANDATORY SCRIPT RULE: ${langInfo.scriptInstruction}\n` +
+        `Answer the farmer's exact question directly first using their real farm telemetry, followed by concise steps. ` +
+        `Never echo null or 'None' values. Keep chemical names and units (kg/ha, ml/L, g/L, °C, NPK) clear.${diagNote}`
+      );
+    }
+
     /**
      * Primary chat query method.
      * Guaranteed routing:
-     *   - If Cloud: sends to Qwen3 backend API.
-     *   - If Offline: NEVER sends to cloud. Uses Gemma Web Worker if loaded, else deterministic offline engine.
+     *   - If Cloud: sends to Qwen3 backend API with active language + auto-detection.
+     *   - If Offline: NEVER sends to cloud. Uses Gemma Web Worker if loaded, else localized offline engine.
      */
     async chat(message, context = {}, onTokenCallback = null) {
       const q = (message || '').trim();
       if (!q) throw new Error('Query cannot be empty.');
+
+      const selectedLang = context.language || (window.GeosenseI18n ? window.GeosenseI18n.getLanguage() : 'en');
+      const effectiveLang = (window.GeosenseI18n && window.GeosenseI18n.detectQueryLanguage)
+        ? window.GeosenseI18n.detectQueryLanguage(q, selectedLang)
+        : selectedLang;
+      const langInfo = (window.GeosenseI18n && window.GeosenseI18n.getLanguageInfo)
+        ? window.GeosenseI18n.getLanguageInfo(effectiveLang)
+        : { code: effectiveLang, name: effectiveLang };
+
+      const { sanitizedContext, contextChips } = this.buildSanitizedContext(context, effectiveLang);
+      const systemPrompt = this.buildLocalizedSystemPrompt(effectiveLang, sanitizedContext);
 
       // 1. CLOUD MODE (Qwen3 Grounded Backend)
       if (this.mode === 'cloud') {
         if (!window.GeosenseApi || !window.GeosenseApi.chatWithAssistant) {
           throw new Error('GeosenseApi cloud backend client is unavailable.');
         }
-        const lang = context.language || (window.GeosenseI18n ? window.GeosenseI18n.getLanguage() : 'en');
-        const res = await window.GeosenseApi.chatWithAssistant(q, lang);
+        const res = await window.GeosenseApi.chatWithAssistant(
+          q,
+          selectedLang,
+          context.lat ?? null,
+          context.lon ?? null,
+          langInfo.name,
+          context.diseaseDiagnosis || null
+        );
         return {
           answer: res.answer,
-          contextUsed: res.context_used || [],
-          engine: 'Qwen3 (Cloud Agronomy Engine)',
+          contextUsed: res.context_used || contextChips,
+          contextChips: res.context_chips || contextChips,
+          detectedLanguage: res.detected_language || effectiveLang,
+          engine: `Qwen3 Cloud AI (${res.language_name || langInfo.name})`,
           mode: 'cloud',
           scientificDisclaimer: res.scientific_disclaimer || 'NOTICE: Agronomic decision support.'
         };
       }
 
       // 2. OFFLINE MODE: STRICT ENFORCEMENT - ZERO CLOUD CALLS
-      // 2A. If Gemma 4 E2B WebGPU worker is loaded and ready
       if (this.isWorkerReady && this.worker) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
           let accumulatedText = '';
 
           const messageHandler = (e) => {
@@ -317,20 +401,21 @@
               this.worker.removeEventListener('message', messageHandler);
               resolve({
                 answer: data.text || accumulatedText,
+                contextChips,
                 tokensPerSec: data.tokensPerSec,
                 tokenCount: data.tokenCount,
                 elapsedMs: data.elapsedMs,
-                engine: data.engine || 'Gemma 4 E2B (LiteRT-LM WebGPU)',
+                engine: `${data.engine || 'Gemma 4 E2B'} (${langInfo.name})`,
                 mode: 'offline_gemma',
-                scientificDisclaimer: 'NOTICE: On-device Gemma 4 E2B AI advisory running locally via WebGPU. Cross-reference critical field interventions with local extension specialists.'
+                scientificDisclaimer: `NOTICE: On-device Gemma 4 E2B AI advisory (${langInfo.name}) running locally via WebGPU.`
               });
             } else if (data.type === 'GENERATE_ERROR') {
               this.worker.removeEventListener('message', messageHandler);
-              console.warn('[AiClient] Gemma inference failed, falling back to deterministic engine:', data.error);
-              // Fallback to deterministic offline engine
-              const fallbackRes = window.OfflineAgroEngine.generateAdvisory(q, context);
+              console.warn('[AiClient] Gemma inference failed, falling back to offline engine:', data.error);
+              const fallbackRes = window.OfflineAgroEngine.generateAdvisory(q, { ...sanitizedContext, language: effectiveLang });
               resolve({
                 ...fallbackRes,
+                contextChips: fallbackRes.contextChips || contextChips,
                 note: `Gemma on-device execution error (${data.error}). Output provided by Offline Deterministic Engine.`
               });
             }
@@ -339,17 +424,126 @@
           this.worker.addEventListener('message', messageHandler);
           this.worker.postMessage({
             type: 'GENERATE',
-            payload: { prompt: q, context }
+            payload: {
+              prompt: q,
+              systemPrompt,
+              language: effectiveLang,
+              languageName: langInfo.name,
+              context: sanitizedContext
+            }
           });
         });
       }
 
-      // 2B. OFFLINE DETERMINISTIC FALLBACK (If model not downloaded or WebGPU unsupported)
+      // 2B. OFFLINE DETERMINISTIC FALLBACK
       if (window.OfflineAgroEngine) {
-        return window.OfflineAgroEngine.generateAdvisory(q, context);
+        const res = window.OfflineAgroEngine.generateAdvisory(q, { ...sanitizedContext, language: effectiveLang });
+        if (!res.contextChips) res.contextChips = contextChips;
+        return res;
       }
 
       throw new Error('No offline AI engine or fallback knowledge base is available.');
+    }
+
+    /**
+     * In-browser color-constancy NPK estimator fallback when offline mode is active
+     * or the FastAPI ONNX backend is unreachable.
+     */
+    async estimateNpkOffline(imageBlobOrFile) {
+      if (!imageBlobOrFile) throw new Error('No image provided for offline NPK estimation.');
+
+      const img = await new Promise((resolve, reject) => {
+        const imageEl = new Image();
+        const url = typeof imageBlobOrFile === 'string' ? imageBlobOrFile : URL.createObjectURL(imageBlobOrFile);
+        imageEl.onload = () => {
+          if (typeof imageBlobOrFile !== 'string') URL.revokeObjectURL(url);
+          resolve(imageEl);
+        };
+        imageEl.onerror = () => reject(new Error('Failed to decode image offline.'));
+        imageEl.src = url;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 112;
+      canvas.height = 112;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 112, 112);
+      const { data } = ctx.getImageData(0, 0, 112, 112);
+
+      let rSum = 0, gSum = 0, bSum = 0;
+      const pxCount = data.length / 4;
+      for (let i = 0; i < data.length; i += 4) {
+        rSum += data[i];
+        gSum += data[i + 1];
+        bSum += data[i + 2];
+      }
+      const rMean = rSum / pxCount;
+      const gMean = gSum / pxCount;
+      const bMean = bSum / pxCount;
+      const grayMean = (rMean + gMean + bMean) / 3 || 1;
+
+      // Gray-World color-balanced normalized channels
+      const rBal = Math.min(255, rMean * Math.min(1.35, Math.max(0.75, grayMean / (rMean || 1))));
+      const gBal = Math.min(255, gMean * Math.min(1.35, Math.max(0.75, grayMean / (gMean || 1))));
+      const bBal = Math.min(255, bMean * Math.min(1.35, Math.max(0.75, grayMean / (bMean || 1))));
+
+      const greenIndex = Math.max(0, Math.min(1, (gBal - rBal * 0.45 + (255 - grayMean) * 0.35) / 180));
+      const nitrogen = parseFloat((130 + greenIndex * 290).toFixed(2));
+      const phosphorus = parseFloat((5 + ((gBal - bBal + 90) / 220) * 23).toFixed(2));
+      const potassium = parseFloat((75 + (grayMean / 255) * 185).toFixed(2));
+
+      const classify = (val, lo, hi) => (val < lo ? 'Low' : val > hi ? 'High' : 'Optimal');
+      const status = {
+        N: classify(nitrogen, 280, 460),
+        P: classify(phosphorus, 10, 30),
+        K: classify(potassium, 120, 280)
+      };
+
+      return {
+        nitrogen,
+        phosphorus,
+        potassium,
+        status,
+        model_source: 'offline_heuristic',
+        inference_engine: 'Offline Color-Constancy Heuristic (ICAR Scale)',
+        recommendations: [
+          `Offline N=${nitrogen} (${status.N}), P=${phosphorus} (${status.P}), K=${potassium} (${status.K}) kg/ha.`,
+          'Reconnect to FastAPI backend for full real-dataset MobileNetV3 + HSV/LAB ONNX inference, and confirm via certified KVK lab assay.'
+        ],
+        scientific_disclaimer: 'OFFLINE ESTIMATE: Computed in-browser using Gray-World color-constancy fallback with zero network requests.'
+      };
+    }
+
+    /**
+     * Hybrid Crop Infection & Disease Diagnosis (Online ONNX + ICAR Grounded API, or Offline Fallback).
+     */
+    async diagnoseDisease(imageBlobOrFile, options = {}) {
+      if (!imageBlobOrFile) throw new Error('No leaf or crop image provided.');
+      if (this.mode !== 'offline' && window.GeosenseApi && window.GeosenseApi.diagnoseCropDisease) {
+        try {
+          return await window.GeosenseApi.diagnoseCropDisease(imageBlobOrFile, options);
+        } catch (err) {
+          console.warn('[AiClient] Cloud diagnose-disease failed, switching to offline fallback:', err.message);
+        }
+      }
+
+      let npkRes = null;
+      try {
+        npkRes = await this.estimateNpkOffline(imageBlobOrFile);
+      } catch (_) {}
+
+      if (window.OfflineAgroEngine && window.OfflineAgroEngine.diagnoseDiseaseOffline) {
+        return window.OfflineAgroEngine.diagnoseDiseaseOffline(
+          options.question || '',
+          npkRes,
+          {
+            language: options.lang || 'en',
+            crop: options.crop ? { primary_recommendation: options.crop } : undefined,
+            weather: options.weather
+          }
+        );
+      }
+      throw new Error('Offline disease diagnostic engine is unavailable.');
     }
 
     /**

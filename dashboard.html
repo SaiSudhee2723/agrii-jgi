@@ -6,7 +6,7 @@
   <title>Dashboard — Geosense Smart Agriculture</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Kannada:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Kannada:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/dashboard.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
@@ -57,6 +57,10 @@
       <button class="nav-item" data-target="soil">
         <span class="icon">🧪</span>
         <span data-i18n="nav.soil">Soil NPK Analysis</span>
+      </button>
+      <button class="nav-item" data-target="disease">
+        <span class="icon">🩺</span>
+        <span data-i18n="nav.disease">Infection & Disease Scanner</span>
       </button>
       <button class="nav-item" data-target="crop">
         <span class="icon">🌾</span>
@@ -120,6 +124,9 @@
             <option value="en">English (EN)</option>
             <option value="hi">हिन्दी (Hindi)</option>
             <option value="kn">ಕನ್ನಡ (Kannada)</option>
+            <option value="mr">मराठी (Marathi)</option>
+            <option value="ta">தமிழ் (Tamil)</option>
+            <option value="te">తెలుగు (Telugu)</option>
           </select>
         </div>
         <div class="farm-tag">
@@ -255,12 +262,13 @@
             <input type="file" id="dash-soil-file" accept="image/jpeg,image/png,image/webp" style="display: none;" />
           </div>
 
-          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
             <button type="button" class="btn-geo-secondary" id="dash-btn-camera" data-i18n="soil.btn_camera">📷 Open Device Camera</button>
             <button type="button" class="btn-geo-secondary" id="dash-btn-snap" style="display: none;" data-i18n="soil.btn_snap">⚡ Capture Frame</button>
             <button type="button" class="btn-geo-secondary" id="dash-btn-upload" data-i18n="soil.btn_upload">📁 Choose from Gallery</button>
             <button type="button" class="btn-geo-secondary" id="dash-btn-reset" style="display: none;" data-i18n="soil.btn_reset">🔄 Reset</button>
             <button type="button" class="btn-geo-primary" id="dash-btn-analyze" disabled data-i18n="soil.btn_analyze">Run AI Quality Check</button>
+            <button type="button" class="btn-geo-npk" id="dash-btn-predict-npk" disabled data-i18n="soil.btn_predict_npk">🔬 Predict Vision NPK (ONNX)</button>
           </div>
 
           <div id="dash-soil-result"></div>
@@ -339,6 +347,50 @@
               <span data-i18n="soil.history_empty_desc">Add your first soil report or camera scan above to get started.</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- PANE 2B: CROP INFECTION & DISEASE SCANNER -->
+      <section class="module-pane" id="pane-disease">
+        <div class="dash-panel" style="margin-bottom: 24px;">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title" data-i18n="disease.title">Crop Infection & Disease Scanner</h3>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;" data-i18n="disease.desc">
+                Two-stage grounded pathology (PlantVillage ONNX + ICAR/UAS Dharwad guidelines + NPK & live weather cross-check).
+              </p>
+            </div>
+            <span class="data-source-badge live" data-i18n="disease.badge_grounded">ONNX + ICAR Grounded</span>
+          </div>
+
+          <div class="camera-box">
+            <video id="dash-disease-video" autoplay playsinline muted></video>
+            <img id="dash-disease-preview" alt="Crop leaf preview" />
+
+            <div id="dash-disease-placeholder">
+              <div style="font-size: 3rem; margin-bottom: 10px;">🌿</div>
+              <strong style="color: #0b1d3a; font-size: 1.1rem;" data-i18n="disease.ready_title">Capture or Upload Leaf / Crop Photo</strong>
+              <p style="color: #64748b; font-size: 0.88rem; margin-top: 4px;" data-i18n="disease.ready_desc">
+                Focus 15–25 cm from symptomatic foliage in natural daylight for highest confidence.
+              </p>
+            </div>
+
+            <input type="file" id="dash-disease-file" accept="image/jpeg,image/png,image/webp" style="display: none;" />
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <input type="text" id="dash-disease-question" data-i18n-placeholder="disease.question_placeholder" placeholder="Optional symptom note (e.g., spotted lower leaves, curling shoots)..." style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.9rem;" />
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <button type="button" class="btn-geo-secondary" id="dash-disease-btn-camera" data-i18n="disease.btn_camera">📷 Capture Photo</button>
+            <button type="button" class="btn-geo-secondary" id="dash-disease-btn-snap" style="display: none;" data-i18n="disease.btn_snap">⚡ Capture Leaf Frame</button>
+            <button type="button" class="btn-geo-secondary" id="dash-disease-btn-upload" data-i18n="disease.btn_upload">📁 Upload Leaf/Crop Photo</button>
+            <button type="button" class="btn-geo-secondary" id="dash-disease-btn-reset" style="display: none;" data-i18n="disease.btn_reset">🔄 Reset</button>
+            <button type="button" class="btn-geo-npk" id="dash-btn-diagnose-disease" disabled data-i18n="disease.btn_diagnose">🩺 Run Grounded Diagnosis</button>
+          </div>
+
+          <div id="dash-disease-result"></div>
         </div>
       </section>
 
@@ -748,106 +800,130 @@
 
       <!-- PANE 8: AI AGRO ASSISTANT -->
       <section class="module-pane" id="pane-assistant">
-        <div class="dash-panel" style="padding: 18px 22px;">
-          <!-- Compact Control Bar -->
-          <div class="ai-mode-header-bar" style="margin-top: 0; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <span style="font-size: 0.82rem; font-weight: 700; color: #475569;" data-i18n="assistant.label_engine">Inference Engine:</span>
+        <div class="dash-panel assistant-panel-shell">
+          <!-- Clean Single-Row Glassmorphic Control Bar -->
+          <div class="ai-glass-toolbar">
+            <div class="ai-toolbar-left">
               <div class="ai-mode-toggle-group">
                 <button type="button" class="ai-mode-btn active" id="btn-mode-cloud" data-i18n="assistant.cloud_btn">
-                  <span>☁️</span> Advanced Cloud AI (Qwen3)
+                  ☁️ Cloud AI (Qwen3)
                 </button>
                 <button type="button" class="ai-mode-btn" id="btn-mode-offline" data-i18n="assistant.offline_btn">
-                  <span>⚡</span> Offline Browser AI (Gemma 4 E2B)
+                  ⚡ Offline AI (Gemma 4 E2B)
                 </button>
               </div>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div class="ai-toolbar-right">
               <div id="ai-active-status-badge" class="ai-engine-status-badge cloud">
                 <span class="status-dot"></span>
                 <span id="ai-status-label" data-i18n="assistant.status_cloud">Cloud AI: Qwen3 Grounded</span>
               </div>
-              <span id="webgpu-status-indicator" style="font-size: 0.78rem; color: #64748b; font-weight: 600;">
+              <span id="webgpu-status-indicator" class="ai-webgpu-pill">
                 WebGPU: Checking...
               </span>
-              <button type="button" class="btn-geo-secondary" id="btn-ai-settings-toggle" style="padding: 4px 10px; font-size: 0.78rem;" data-i18n="assistant.settings_btn">
-                ⚙️ Settings
-              </button>
-            </div>
-          </div>
 
-          <!-- Offline AI Model Information & Download Banner (Shown when Offline AI is active) -->
-          <div id="offline-ai-banner" class="offline-ai-banner" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
-              <div>
-                <h4 style="font-size: 0.96rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;" id="offline-banner-title">
-                  ⚡ On-Device Gemma 4 E2B (LiteRT-LM WebGPU)
-                </h4>
-                <p style="font-size: 0.84rem; color: #475569; line-height: 1.5; margin-bottom: 8px;" id="offline-banner-desc">
-                  Run Google's Gemma 4 E2B directly inside your browser. No queries ever leave your device.
-                  Storage requirement: <strong>~1.25 GB</strong> | Memory: <strong>~2 GB WebGPU VRAM</strong>.
-                </p>
-                <div id="offline-model-meta" style="font-size: 0.78rem; color: #64748b;">
-                  Status: Checking cached models in IndexedDB...
+              <div class="ai-settings-anchor">
+                <button type="button" class="ai-settings-icon-btn" id="btn-ai-settings-toggle" title="AI Engine & Offline Model Settings" aria-label="AI Settings">
+                  ⚙️
+                </button>
+
+                <!-- Clean Settings Popover -->
+                <div id="ai-settings-popover" class="ai-settings-popover" style="display: none;">
+                  <div class="ai-popover-header">
+                    <strong>Offline Gemma 4 E2B &amp; Runtime</strong>
+                    <button type="button" id="btn-close-ai-popover" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1rem;">✕</button>
+                  </div>
+
+                  <div id="offline-ai-banner" class="ai-popover-section">
+                    <div id="offline-banner-title" style="font-weight:700;font-size:0.86rem;color:#0f172a;margin-bottom:4px;">⚡ On-Device Gemma 4 E2B (LiteRT-LM WebGPU)</div>
+                    <div id="offline-model-meta" style="font-size:0.78rem;color:#475569;line-height:1.45;margin-bottom:10px;">
+                      Status: Checking cached models in IndexedDB...
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;" id="offline-banner-actions">
+                      <button type="button" class="btn-geo-primary" id="btn-download-gemma" style="padding:7px 14px;font-size:0.8rem;">
+                        Download Gemma 4 E2B
+                      </button>
+                      <button type="button" class="btn-geo-secondary" id="btn-clear-gemma-cache" style="padding:7px 12px;font-size:0.8rem;display:none;">
+                        Clear Cache
+                      </button>
+                    </div>
+                    <div id="offline-fallback-notice" style="display:none;margin-top:8px;padding:8px 10px;background:#fefce8;border:1px solid #fef08a;border-radius:8px;font-size:0.76rem;color:#854d0e;">
+                      WebGPU unsupported in this browser. Offline Deterministic Agronomy Engine is active.
+                    </div>
+                  </div>
+
+                  <div class="ai-popover-section" style="border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;">
+                    <label style="display:block;font-size:0.76rem;font-weight:600;color:#475569;margin-bottom:5px;">Gemma 4 E2B .litertlm URL</label>
+                    <input type="text" id="input-model-provider-url" style="width:100%;padding:7px 10px;font-size:0.78rem;border-radius:8px;border:1px solid #cbd5e1;margin-bottom:8px;" value="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/model.litertlm" />
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <button type="button" class="btn-geo-primary" id="btn-save-model-url" style="padding:5px 12px;font-size:0.76rem;">Save</button>
+                      <button type="button" class="btn-geo-secondary" id="btn-reset-model-url" style="padding:5px 10px;font-size:0.76rem;">Reset</button>
+                      <span id="save-model-url-status" style="font-size:0.74rem;color:#10b981;font-weight:600;"></span>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div style="display: flex; gap: 8px; flex-shrink: 0;" id="offline-banner-actions">
-                <button type="button" class="btn-geo-primary" id="btn-download-gemma" style="padding: 8px 16px; font-size: 0.84rem;">
-                  Download Gemma 4 E2B
-                </button>
-                <button type="button" class="btn-geo-secondary" id="btn-clear-gemma-cache" style="padding: 8px 12px; font-size: 0.84rem; display: none;">
-                  Clear Cache
-                </button>
-              </div>
-            </div>
-
-            <!-- Download Progress Bar (Hidden by default) -->
-            <div id="offline-download-progress-box" style="display: none; margin-top: 12px;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.80rem; font-weight: 600; color: #047857;">
-                <span id="download-progress-text">Downloading Gemma 4 E2B weights: 0%</span>
-                <span id="download-speed-text">0.0 MB/s</span>
-              </div>
-              <div class="offline-progress-track">
-                <div class="offline-progress-fill" id="download-progress-fill"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #64748b;">
-                <span id="download-mb-text">0 MB / ~1,250 MB</span>
-                <span id="download-eta-text">Calculating ETA...</span>
-              </div>
-            </div>
-
-            <!-- Fallback Notice (if WebGPU unsupported) -->
-            <div id="offline-fallback-notice" style="display: none; margin-top: 10px; padding: 10px 14px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; font-size: 0.82rem; color: #854d0e;">
-              <strong>Notice:</strong> WebGPU hardware acceleration is not available in your current browser session. Geosense has seamlessly enabled the <strong>Offline Deterministic Agronomy Engine</strong> (FAO-56 evapotranspiration models + deterministic crop diagnostics) with 100% offline accuracy and zero data transmission.
             </div>
           </div>
 
-          <!-- Model Settings Drawer (Collapsible) -->
-          <div id="ai-settings-drawer" style="display: none; padding: 16px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 10px; margin-bottom: 16px;">
-            <h5 style="font-size: 0.88rem; font-weight: 700; margin-bottom: 10px; color: #1e293b;">LiteRT-LM Model Provider Configuration</h5>
-            <div style="display: grid; gap: 10px;">
-              <div>
-                <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #475569; margin-bottom: 4px;">Gemma 4 E2B .litertlm Endpoint URL</label>
-                <input type="text" id="input-model-provider-url" style="width: 100%; padding: 8px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid #cbd5e1;" value="https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/model.litertlm" />
-              </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" class="btn-geo-primary" id="btn-save-model-url" style="padding: 6px 14px; font-size: 0.80rem;">Save Provider</button>
-                <button type="button" class="btn-geo-secondary" id="btn-reset-model-url" style="padding: 6px 12px; font-size: 0.80rem;">Reset Default</button>
-                <span id="save-model-url-status" style="font-size: 0.78rem; color: #10b981; font-weight: 600;"></span>
-              </div>
+          <!-- Slim Download Progress Strip (Visible only during download) -->
+          <div id="offline-download-progress-box" class="ai-download-strip" style="display: none;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.80rem; font-weight: 600; color: #047857;">
+              <span id="download-progress-text">Downloading Gemma 4 E2B weights: 0%</span>
+              <span id="download-speed-text">0.0 MB/s</span>
+            </div>
+            <div class="offline-progress-track">
+              <div class="offline-progress-fill" id="download-progress-fill"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #64748b;">
+              <span id="download-mb-text">0 MB / ~1,250 MB</span>
+              <span id="download-eta-text">Calculating ETA...</span>
             </div>
           </div>
 
+          <!-- Spacious Chat Interface -->
           <div class="chat-container">
             <div class="chat-messages" id="dash-chat-messages">
               <div class="chat-bubble assistant" data-i18n="assistant.greeting">
-                Hello! I am Geo, your AI agronomy assistant. I cross-reference your verified soil test records and live local weather to provide agronomic advisories. How can I help with your soil, crops, or irrigation today?
+                Hello! I am Geo, your AI agronomy assistant. I cross-reference your verified soil test records and live local weather to give direct field guidance. How can I help your crop today?
               </div>
             </div>
+
+            <!-- Crop-Aware Quick Prompt Chips -->
+            <div class="chat-quick-prompts" id="dash-chat-quick-prompts"></div>
+
+            <!-- Inline Camera Capture Strip inside Geo Chat (hidden until Camera clicked) -->
+            <div id="dash-chat-camera-strip" style="display:none; padding:10px 18px; background:#f8fafc; border-top:1px solid #e2e8f0; align-items:center; gap:12px; flex-wrap:wrap;">
+              <video id="dash-chat-video" autoplay playsinline muted style="width:180px; height:120px; border-radius:10px; object-fit:cover; background:#0b1d3a;"></video>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn-geo-primary" id="dash-chat-cam-snap" style="padding:7px 14px; font-size:0.82rem;">⚡ Capture Leaf</button>
+                <button type="button" class="btn-geo-secondary" id="dash-chat-cam-cancel" style="padding:7px 12px; font-size:0.82rem;">✕ Close Camera</button>
+              </div>
+            </div>
+
+            <!-- Image Attachment Preview Chip (Upload / Paste / Camera) -->
+            <div id="dash-chat-image-chip" class="chat-attachment-bar" style="display:none;">
+              <div class="chat-attach-chip">
+                <img id="dash-chat-attach-thumb" class="chat-attach-thumb" alt="Attached photo preview" />
+                <div>
+                  <div id="dash-chat-attach-name" style="font-weight:600; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">leaf-photo.jpg</div>
+                  <button type="button" id="dash-chat-attach-mode" class="chat-attach-mode-btn" title="Switch between Infection Diagnosis and Soil NPK">🩺 Infection Scan</button>
+                </div>
+                <button type="button" id="dash-chat-attach-remove" class="chat-attach-remove" title="Remove attachment">✕</button>
+              </div>
+            </div>
+
+            <!-- Smart Crop-Aware Input Bar + Photo Upload/Capture/Paste -->
             <div class="chat-input-bar">
-              <input type="text" id="dash-chat-input" data-i18n-placeholder="assistant.placeholder" placeholder="e.g., Why are my bottom wheat leaves turning yellow?" />
+              <input type="file" id="dash-chat-photo-file" accept="image/jpeg,image/png,image/webp" style="display: none;" />
+              <button type="button" class="chat-photo-btn" id="dash-btn-chat-photo" data-i18n-title="assistant.attach_title" title="Attach or Paste Leaf/Soil Photo">
+                📎
+              </button>
+              <button type="button" class="chat-photo-btn" id="dash-btn-chat-cam" data-i18n-title="disease.btn_camera" title="Capture Leaf Photo with Camera">
+                📷
+              </button>
+              <input type="text" id="dash-chat-input" data-i18n-placeholder="assistant.placeholder" placeholder="Ask about Rice leaf symptoms, fertilizer dosage, or irrigation..." />
               <button class="btn-geo-primary" id="dash-btn-chat-send" data-i18n="assistant.btn_send">Send</button>
             </div>
           </div>

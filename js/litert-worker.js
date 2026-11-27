@@ -65,7 +65,7 @@ self.onmessage = async (event) => {
       }
 
       self.postMessage({ type: 'STATUS', status: 'IMPORTING_RUNTIME', message: 'Loading @litert-lm/core WebGPU engine...' });
-      
+
       let LiteRtCore;
       try {
         LiteRtCore = await import('https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm');
@@ -79,7 +79,7 @@ self.onmessage = async (event) => {
       }
 
       self.postMessage({ type: 'STATUS', status: 'INITIALIZING_MODEL', message: 'Compiling Gemma 4 E2B shaders and loading weights...' });
-      
+
       const { modelBlob, modelUrl, systemPrompt } = payload;
       const modelSource = modelBlob || modelUrl;
 
@@ -132,7 +132,7 @@ self.onmessage = async (event) => {
 
   // 3. GENERATE TEXT (OFFLINE INFERENCE)
   if (type === 'GENERATE') {
-    const { prompt, context } = payload;
+    const { prompt, context, systemPrompt, language, languageName } = payload;
 
     if (!isModelLoaded || !conversation) {
       self.postMessage({
@@ -147,11 +147,30 @@ self.onmessage = async (event) => {
       let fullText = '';
       let tokenCount = 0;
 
-      // Construct prompt with local context (latest soil test, crop, weather)
-      let augmentedPrompt = prompt;
-      if (context && (context.soil || context.crop || context.weather)) {
-        augmentedPrompt = `[Context: Soil=${JSON.stringify(context.soil || {})}, Crop=${JSON.stringify(context.crop || {})}, Weather=${JSON.stringify(context.weather || {})}]\nFarmer Question: ${prompt}`;
+      // Sanitize telemetry (never leak null / None values into prompt)
+      const parts = [];
+      if (context && context.crop && context.crop.primary_recommendation) {
+        parts.push(`Crop=${context.crop.primary_recommendation}`);
       }
+      if (context && context.soil) {
+        const s = context.soil;
+        const soilBits = [];
+        if (s.nitrogen_ppm != null) soilBits.push(`N=${s.nitrogen_ppm} kg/ha`);
+        if (s.phosphorus_ppm != null) soilBits.push(`P=${s.phosphorus_ppm} kg/ha`);
+        if (s.potassium_ppm != null) soilBits.push(`K=${s.potassium_ppm} kg/ha`);
+        if (s.soil_ph != null) soilBits.push(`pH=${s.soil_ph}`);
+        if (soilBits.length) parts.push(`Soil=[${soilBits.join(', ')}]`);
+      }
+      if (context && context.weather && context.weather.temp != null) {
+        const w = context.weather;
+        parts.push(`Weather=${w.temp}°C${w.humidity != null ? `, ${w.humidity}% RH` : ''}${w.location ? ` (${w.location})` : ''}`);
+      }
+
+      const langDirective = systemPrompt
+        ? `[Language & Style Rules]\n${systemPrompt}\n`
+        : (language && language !== 'en' ? `[Target Language: ${languageName || language}. Reply strictly in native script.]\n` : '');
+      const telemetryBlock = parts.length ? `[Farm Telemetry: ${parts.join(' | ')}]\n` : '';
+      const augmentedPrompt = `${langDirective}${telemetryBlock}Farmer Question: ${prompt}`;
 
       // LiteRT conversation streaming
       const stream = conversation.sendMessageStreaming
@@ -161,10 +180,10 @@ self.onmessage = async (event) => {
       // Handle async iterable stream
       if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
         for await (const chunk of stream) {
-          const chunkText = (chunk && chunk.content && chunk.content[0] && chunk.content[0].text) 
-            ? chunk.content[0].text 
+          const chunkText = (chunk && chunk.content && chunk.content[0] && chunk.content[0].text)
+            ? chunk.content[0].text
             : (typeof chunk === 'string' ? chunk : (chunk.text || ''));
-          
+
           if (chunkText) {
             fullText += chunkText;
             tokenCount++;

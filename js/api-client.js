@@ -83,6 +83,23 @@ class ApiClient {
     });
   }
 
+  static async predictSoilNPK(imageFileOrBase64) {
+    if (typeof imageFileOrBase64 === 'string') {
+      return this.request('/soil/predict-npk', {
+        method: 'POST',
+        body: JSON.stringify({ image_base64: imageFileOrBase64 })
+      });
+    }
+    const formData = new FormData();
+    const filename = (imageFileOrBase64 && imageFileOrBase64.name) ? imageFileOrBase64.name : 'soil_scan.jpg';
+    formData.append('file', imageFileOrBase64, filename);
+
+    return this.request('/soil/predict-npk', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
   static async submitManualSoilTest(testData) {
     return this.request('/soil/manual', {
       method: 'POST',
@@ -125,17 +142,65 @@ class ApiClient {
   }
 
   // --- Dashboard Overview ---
-  static async getDashboardOverview() {
-    return this.request('/overview/stats', {
+  static async getDashboardOverview(lat = null, lon = null) {
+    const params = new URLSearchParams();
+    if (lat !== null && lat !== undefined) params.append('lat', lat);
+    if (lon !== null && lon !== undefined) params.append('lon', lon);
+    const qs = params.toString();
+    return this.request(qs ? `/overview/stats?${qs}` : '/overview/stats', {
       method: 'GET'
     });
   }
 
+  // --- Module 9: Crop Infection & Disease Scanner ---
+  static async diagnoseCropDisease(imageFileOrBase64, options = {}) {
+    const { lang = 'en', question = '', crop = '', lat = null, lon = null, weather = null } = options;
+
+    if (typeof imageFileOrBase64 === 'string') {
+      const payload = {
+        image_base64: imageFileOrBase64,
+        lang: lang || 'en'
+      };
+      if (question) payload.question = question;
+      if (crop) payload.crop = crop;
+      if (lat !== null && lat !== undefined) payload.lat = lat;
+      if (lon !== null && lon !== undefined) payload.lon = lon;
+      if (weather) payload.weather = weather;
+
+      return this.request('/diagnose-disease', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+
+    const formData = new FormData();
+    formData.append('file', imageFileOrBase64, imageFileOrBase64.name || 'crop-leaf.jpg');
+    formData.append('lang', lang || 'en');
+    if (question) formData.append('question', question);
+    if (crop) formData.append('crop', crop);
+    if (lat !== null && lat !== undefined) formData.append('lat', String(lat));
+    if (lon !== null && lon !== undefined) formData.append('lon', String(lon));
+
+    return this.request('/diagnose-disease', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
   // --- Module 8: AI Assistant ---
-  static async chatWithAssistant(message, language = 'en') {
+  static async chatWithAssistant(message, language = 'en', lat = null, lon = null, languageName = null, diagnosisContext = null) {
+    const body = { message, language };
+    if (languageName) body.language_name = languageName;
+    if (lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
+      body.lat = lat;
+      body.lon = lon;
+    }
+    if (diagnosisContext) {
+      body.diagnosis_context = diagnosisContext;
+    }
     return this.request('/assistant/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, language })
+      body: JSON.stringify(body)
     });
   }
 

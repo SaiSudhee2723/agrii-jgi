@@ -77,6 +77,12 @@
     const mapContainer = document.getElementById('farm-map-canvas');
     if (!mapContainer || map) return;
 
+    // Sync initial center with live/session location if already resolved
+    const cachedLoc = window._geosenseLastLocation;
+    if (cachedLoc && cachedLoc.lat && cachedLoc.lon) {
+      currentCoordinates = { lat: cachedLoc.lat, lng: cachedLoc.lon };
+    }
+
     // 1. High-Resolution Satellite Layer (DEFAULT: Google Hybrid Satellite)
     // Provides crystal-clear rural agricultural satellite imagery down to zoom 20 with field/road labels
     // and eliminates "Map data not yet available" placeholders.
@@ -115,13 +121,10 @@
     // Save Farm Modal Setup
     bindFarmModal();
 
-    // Load initial weather for starting position
-    updateWeatherTelemetry(currentCoordinates.lat, currentCoordinates.lng);
-
-    // Auto-detect user's GPS live location immediately
+    // Auto-detect user's live GPS first; saved farms load into drawer without hijacking live GPS
     detectLiveGPS(false);
 
-    // Load previously saved farms from Supabase
+    // Load previously saved farms into the saved farms drawer
     loadSavedFarms();
   }
 
@@ -211,17 +214,19 @@
         const item = results[0];
         const lat = parseFloat(parseFloat(item.lat).toFixed(5));
         const lon = parseFloat(parseFloat(item.lon).toFixed(5));
-        const name = item.display_name ? item.display_name.split(',')[0] : query;
+        const parts = (item.display_name || query).split(',').map(s => s.trim()).filter(Boolean);
+        const name = parts.slice(0, 3).join(', ') || query;
 
         map.flyTo([lat, lon], 16, { duration: 1.2 });
         setFarmMarker(lat, lon);
-        updateWeatherTelemetry(lat, lon);
 
-        if (hudStatus) hudStatus.textContent = `Found: ${name}`;
+        if (hudStatus) hudStatus.textContent = `Found: ${parts[0] || name}`;
 
-        // Sync with top weather module
+        // Sync with top weather module (renderWeatherUI will populate HUD telemetry without duplicate call)
         if (window.loadWeatherModuleData) {
           window.loadWeatherModuleData(null, { lat, lon, name });
+        } else {
+          updateWeatherTelemetry(lat, lon);
         }
       } else {
         alert(`Could not find coordinates for "${query}". Try searching with a nearby district or state.`);
@@ -277,11 +282,11 @@
 
         if (hudStatus) hudStatus.textContent = '📍 Live GPS Locked';
 
-        updateWeatherTelemetry(lat, lng);
-
-        // Sync with top Weather Module
+        // Sync with top Weather Module (let backend resolve exact village/town & update HUD without duplicate fetch)
         if (window.loadWeatherModuleData) {
-          window.loadWeatherModuleData(null, { lat, lon: lng, name: 'Live GPS Farm Location' });
+          window.loadWeatherModuleData(null, { lat, lon: lng, name: '' });
+        } else {
+          updateWeatherTelemetry(lat, lng);
         }
       },
       (err) => {
@@ -293,8 +298,16 @@
           alert('Could not access your live GPS (' + (err.message || 'Permission denied') + '). Please ensure location permission is allowed in your browser.');
         }
         if (hudStatus) hudStatus.textContent = 'GPS offline (Click to pin)';
+        // Fall back to saved farm #1 or regional telemetry only if live GPS failed/denied
+        if (!isUserInitiated) {
+          if (savedFarmsCache.length > 0 && !activeFarmId) {
+            flyToFarm(savedFarmsCache[0].id, false);
+          } else {
+            updateWeatherTelemetry(currentCoordinates.lat, currentCoordinates.lng);
+          }
+        }
       },
-      { timeout: 8000, enableHighAccuracy: true, maximumAge: 60000 }
+      { timeout: 8000, enableHighAccuracy: true, maximumAge: isUserInitiated ? 0 : 60000 }
     );
   }
 
@@ -312,10 +325,11 @@
       farmMarker.on('dragend', (e) => {
         const pos = e.target.getLatLng();
         setFarmMarker(pos.lat, pos.lng);
-        updateWeatherTelemetry(pos.lat, pos.lng);
-        // Sync top weather module on dragend
+        // Sync top weather module on dragend (resolves exact village/town & updates HUD)
         if (window.loadWeatherModuleData) {
-          window.loadWeatherModuleData(null, { lat: pos.lat, lon: pos.lng, name: 'Farm Location' });
+          window.loadWeatherModuleData(null, { lat: pos.lat, lon: pos.lng, name: '' });
+        } else {
+          updateWeatherTelemetry(pos.lat, pos.lng);
         }
       });
     } else {
@@ -335,10 +349,10 @@
     } else {
       // Normal click: drop marker & sync weather
       setFarmMarker(e.latlng.lat, e.latlng.lng);
-      updateWeatherTelemetry(e.latlng.lat, e.latlng.lng);
-      // Sync top weather module
       if (window.loadWeatherModuleData) {
-        window.loadWeatherModuleData(null, { lat: e.latlng.lat, lon: e.latlng.lng, name: 'Selected Plot' });
+        window.loadWeatherModuleData(null, { lat: e.latlng.lat, lon: e.latlng.lng, name: '' });
+      } else {
+        updateWeatherTelemetry(e.latlng.lat, e.latlng.lng);
       }
     }
   }
@@ -692,10 +706,7 @@
         </div>
       `).join('');
 
-      // If user has saved farms and no active polygon, auto-load the most recent farm!
-      if (!activeFarmId && savedFarmsCache.length > 0) {
-        flyToFarm(savedFarmsCache[0].id, false);
-      }
+      // Saved farms remain listed in the drawer so they never hijack the user's Live GPS lock.
     } catch (err) {
       if (listEl) {
         listEl.innerHTML = `<div style="color: #b91c1c; font-size: 0.84rem; padding: 8px;">Could not load saved farms: ${escapeHtml(err.message)}</div>`;
@@ -774,11 +785,26 @@
     deleteFarm,
     detectLiveGPS,
     searchLocation,
-    setCoordinates: (lat, lng) => {
+    setCoordinates: (lat, lng, skipWeatherFetch = false, weatherData = null) => {
+      currentCoordinates = { lat: parseFloat(lat.toFixed(5)), lng: parseFloat(lng.toFixed(5)) };
       if (map) {
         map.flyTo([lat, lng], 16);
         setFarmMarker(lat, lng);
-        updateWeatherTelemetry(lat, lng);
+        if (weatherData && weatherData.current) {
+          const hudTemp = document.getElementById('hud-temp');
+          const hudHumid = document.getElementById('hud-humidity');
+          const hudRain = document.getElementById('hud-rain');
+          const hudEt = document.getElementById('hud-et');
+          const hudStatus = document.getElementById('hud-status');
+          if (hudTemp) hudTemp.textContent = `${Math.round(weatherData.current.temperature)}°C`;
+          if (hudHumid) hudHumid.textContent = `${Math.round(weatherData.current.humidity)}% RH`;
+          if (hudRain) hudRain.textContent = `${weatherData.current.precipitation_mm || 0} mm`;
+          const et0 = estimateET0(weatherData.current.temperature, weatherData.current.humidity, weatherData.current.wind_speed);
+          if (hudEt) hudEt.textContent = `${et0} mm ET₀`;
+          if (hudStatus && weatherData.location_name) hudStatus.textContent = `📍 ${weatherData.location_name}`;
+        } else if (!skipWeatherFetch) {
+          updateWeatherTelemetry(lat, lng);
+        }
       }
     }
   };

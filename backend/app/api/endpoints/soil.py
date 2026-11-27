@@ -3,13 +3,15 @@ import uuid
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, Request, HTTPException, status, Depends
 from app.schemas.soil import (
     SoilAnalysisReport,
     ManualSoilTestCreate,
-    SoilTestRecord
+    SoilTestRecord,
+    NPKPredictionResponse,
 )
 from app.services.soil_service import SoilAnalysisService
+from app.services.npk_inference_service import NPKInferenceService
 from app.core.security import get_current_user_optional, get_current_user_required
 from app.core.supabase import get_supabase_client
 from app.core.database import get_sqlite_conn
@@ -111,6 +113,131 @@ async def analyze_soil_image(
             logger.warning(f"Could not persist soil analysis to Supabase: {e}")
 
     return report
+
+
+@router.post(
+    "/predict-npk",
+    response_model=NPKPredictionResponse,
+    summary="Predict soil/leaf NPK levels via trained ONNX vision model (multipart upload or base64 JSON)"
+)
+async def predict_soil_npk(
+    request: Request,
+    file: Optional[UploadFile] = File(None, description="Captured or uploaded soil/leaf image"),
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+):
+    """
+    Module 1 Vision NPK Inference Endpoint:
+    Accepts either multipart image UploadFile (`file`) or JSON `{ "image_base64": "..." }`
+    from camera-service.js, runs OpenCV Gray-World/LAB preprocessing + npk_model.onnx inference,
+    persists the scan into geosense_local.db, and returns predicted N, P, K values + statuses.
+    """
+    contents: Optional[bytes] = None
+
+    if file is not None:
+        if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid image type '{file.content_type}'. Supported formats: JPEG, PNG, WEBP."
+            )
+        contents = await file.read()
+    else:
+        content_type = (request.headers.get("content-type") or "").lower()
+        if "application/json" in content_type:
+            try:
+                body = await request.json()
+            except Exception as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid JSON payload: {exc}")
+            b64_img = body.get("image_base64") or body.get("image")
+            if not b64_img:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing 'image_base64' field.")
+            try:
+                contents = NPKInferenceService.decode_base64_image(b64_img)
+            except ValueError as ve:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide either multipart 'file' upload or JSON body with 'image_base64'."
+            )
+
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Image size exceeds the 15 MB limit."
+        )
+
+    try:
+        prediction = NPKInferenceService.predict_from_bytes(contents)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(ve))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(fnf))
+    except Exception as exc:
+        logger.error(f"NPK vision inference error: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="NPK vision inference failed.")
+
+    user_id = current_user.get("sub") if current_user else "anonymous"
+    now_str = datetime.utcnow().isoformat() + "Z"
+    rec_id = str(uuid.uuid4())
+    prediction.id = rec_id
+    prediction.created_at = now_str
+
+    summary = (
+        f"Vision AI NPK Scan: N={prediction.nitrogen} ({prediction.status.N}), "
+        f"P={prediction.phosphorus} ({prediction.status.P}), "
+        f"K={prediction.potassium} ({prediction.status.K}) kg/ha"
+    )
+
+    try:
+        conn = get_sqlite_conn()
+        cursor = conn.cursor()
+        q_json = json.dumps(prediction.quality_metrics.model_dump()) if prediction.quality_metrics else "{}"
+        cursor.execute("""
+            INSERT INTO soil_analysis (
+                id, user_id, quality_status, quality_details, color_metrics,
+                soil_texture_estimate, soil_condition, nitrogen_ppm, phosphorus_ppm, potassium_ppm,
+                measurement_type, lab_name, scientific_disclaimer, lab_test_recommended, recommendations, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            rec_id,
+            user_id,
+            "passed" if (not prediction.quality_metrics or prediction.quality_metrics.is_acceptable) else "suboptimal",
+            q_json,
+            json.dumps(prediction.status.model_dump()),
+            "Vision ONNX Regression",
+            summary,
+            prediction.nitrogen,
+            prediction.phosphorus,
+            prediction.potassium,
+            "vision_npk_onnx",
+            "Geosense Vision NPK (ONNX)",
+            prediction.scientific_disclaimer,
+            1,
+            json.dumps(prediction.recommendations),
+            now_str
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Could not save NPK vision scan to local database: {e}")
+
+    supabase = get_supabase_client()
+    if supabase and user_id != "anonymous":
+        try:
+            supabase.table("soil_analysis").insert({
+                "id": rec_id,
+                "user_id": user_id,
+                "quality_status": "passed",
+                "soil_condition": summary,
+                "nitrogen_level": f"{prediction.nitrogen} kg/ha ({prediction.status.N})",
+                "phosphorus_level": f"{prediction.phosphorus} kg/ha ({prediction.status.P})",
+                "potassium_level": f"{prediction.potassium} kg/ha ({prediction.status.K})",
+                "recommendations": prediction.recommendations
+            }).execute()
+        except Exception as e:
+            logger.warning(f"Could not persist NPK vision scan to Supabase: {e}")
+
+    return prediction
 
 @router.post("/manual", response_model=SoilTestRecord, summary="Save actual soil laboratory or physical sensor test")
 async def save_manual_soil_test(
@@ -237,7 +364,9 @@ async def get_soil_test_history(
         data_source = (
             f"Laboratory Assay ({r['lab_name']})" if m_type == "laboratory_report" else (
                 "Physical Field Sensor" if m_type == "physical_sensor" else (
-                    "Manual Farmer Entry" if m_type == "manual_entry" else "Camera Physical Image Scan"
+                    "Vision NPK ONNX Model" if m_type == "vision_npk_onnx" else (
+                        "Manual Farmer Entry" if m_type == "manual_entry" else "Camera Physical Image Scan"
+                    )
                 )
             )
         )

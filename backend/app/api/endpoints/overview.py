@@ -1,6 +1,6 @@
 import logging
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from app.core.security import get_current_user_optional
 from app.core.database import get_sqlite_conn
 from app.services.weather_service import WeatherService
@@ -10,6 +10,8 @@ router = APIRouter()
 
 @router.get("/stats", summary="Get genuine authenticated user dashboard metrics and real activity feed")
 async def get_dashboard_overview_stats(
+    lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Optional live latitude"),
+    lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Optional live longitude"),
     current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
 ):
     """
@@ -111,10 +113,10 @@ async def get_dashboard_overview_stats(
     # Sort activities by timestamp descending
     activities.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
 
-    # 5. Live Open-Meteo Weather
+    # 5. Live OpenWeatherMap / Open-Meteo Weather using live GPS coordinates if provided
     weather_summary = None
     try:
-        weather_res = await WeatherService.get_weather()
+        weather_res = await WeatherService.get_weather(latitude=lat, longitude=lon)
         weather_summary = {
             "temperature": weather_res.current.temperature,
             "condition": weather_res.current.weather_condition,
@@ -122,6 +124,8 @@ async def get_dashboard_overview_stats(
             "wind_speed": weather_res.current.wind_speed,
             "precipitation": weather_res.current.precipitation_mm,
             "location": weather_res.location_name,
+            "latitude": weather_res.latitude,
+            "longitude": weather_res.longitude,
             "source": weather_res.source,
             "last_updated": weather_res.last_updated,
             "is_available": True

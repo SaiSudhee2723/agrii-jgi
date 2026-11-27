@@ -84,6 +84,36 @@ class CameraService {
   }
 
   /**
+   * Capture still snapshot from the running video stream as a base64 Data URL.
+   */
+  captureBase64(quality = 0.92) {
+    if (!this.videoElement || !this.stream) {
+      throw new Error('Camera is not active.');
+    }
+
+    const video = this.videoElement;
+    const canvas = this.canvasElement;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+
+  /**
+   * Convert any Blob/File image into a base64 Data URL string.
+   */
+  static blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Failed to encode image to base64.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
    * Stop camera stream and free hardware resources.
    */
   stopCamera() {

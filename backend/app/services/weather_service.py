@@ -14,8 +14,56 @@ class WeatherService:
     OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
     OPENWEATHER_FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
     OPENWEATHER_GEO_URL = "https://api.openweathermap.org/geo/1.0/reverse"
-    OPENWEATHER_DIRECT_GEO_URL = "http://api.openweathermap.org/geo/1.0/direct"
+    OPENWEATHER_DIRECT_GEO_URL = "https://api.openweathermap.org/geo/1.0/direct"
+    NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
+    NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
     OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+
+    _GENERIC_LOCATION_NAMES = {
+        "", "local farm", "live gps farm", "live gps farm location",
+        "farm location", "selected plot", "current farm location", "direct satellite feed"
+    }
+
+    @classmethod
+    def _is_generic_location(cls, name: Optional[str]) -> bool:
+        if not name:
+            return True
+        return name.strip().lower() in cls._GENERIC_LOCATION_NAMES
+
+    @classmethod
+    async def _reverse_geocode_nominatim(cls, lat: float, lng: float) -> Optional[str]:
+        """Resolves exact village/town/locality, district, and state using OpenStreetMap Nominatim."""
+        try:
+            async with httpx.AsyncClient(timeout=4.5) as client:
+                res = await client.get(
+                    cls.NOMINATIM_REVERSE_URL,
+                    params={"format": "jsonv2", "lat": lat, "lon": lng, "zoom": 14, "addressdetails": 1},
+                    headers={"User-Agent": "GeosenseSmartAgriculture/1.0"}
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    addr = data.get("address", {})
+                    locality = (
+                        addr.get("village")
+                        or addr.get("hamlet")
+                        or addr.get("town")
+                        or addr.get("suburb")
+                        or addr.get("city")
+                        or addr.get("municipality")
+                        or ""
+                    )
+                    district = addr.get("state_district") or addr.get("county") or ""
+                    state = addr.get("state") or addr.get("country") or ""
+                    parts = []
+                    for p in [locality, district, state]:
+                        p_clean = p.strip()
+                        if p_clean and p_clean not in parts:
+                            parts.append(p_clean)
+                    if parts:
+                        return ", ".join(parts[:3])
+        except Exception as e:
+            logger.debug(f"Nominatim reverse geocode fallback notice: {e}")
+        return None
 
     @classmethod
     async def _auto_detect_ip_location(cls) -> Optional[tuple[float, float, str]]:
@@ -38,23 +86,43 @@ class WeatherService:
 
     @classmethod
     async def _geocode_query(cls, query: str, api_key: str) -> Optional[tuple[float, float, str]]:
-        """Resolves city, district or village name to lat/lon using OpenWeather geocoding."""
+        """Resolves city, district or village name to lat/lon using Nominatim + OpenWeather geocoding."""
+        # 1. Try OpenWeather Direct Geocoding if API key available
+        if api_key:
+            try:
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    res = await client.get(
+                        cls.OPENWEATHER_DIRECT_GEO_URL,
+                        params={"q": query, "limit": 1, "appid": api_key}
+                    )
+                    if res.status_code == 200 and len(res.json()) > 0:
+                        g = res.json()[0]
+                        lat = float(g.get("lat"))
+                        lon = float(g.get("lon"))
+                        name = g.get("name", query)
+                        state = g.get("state", g.get("country", ""))
+                        loc_name = f"{name}, {state}".strip(", ")
+                        return lat, lon, loc_name
+            except Exception as e:
+                logger.warning(f"OpenWeather geocoding error for '{query}': {e}")
+
+        # 2. Fallback to Nominatim Search (accurate for villages/taluks/districts)
         try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=4.5) as client:
                 res = await client.get(
-                    cls.OPENWEATHER_DIRECT_GEO_URL,
-                    params={"q": query, "limit": 1, "appid": api_key}
+                    cls.NOMINATIM_SEARCH_URL,
+                    params={"format": "jsonv2", "q": query, "limit": 1, "addressdetails": 1},
+                    headers={"User-Agent": "GeosenseSmartAgriculture/1.0"}
                 )
                 if res.status_code == 200 and len(res.json()) > 0:
-                    g = res.json()[0]
-                    lat = float(g.get("lat"))
-                    lon = float(g.get("lon"))
-                    name = g.get("name", query)
-                    state = g.get("state", g.get("country", ""))
-                    loc_name = f"{name}, {state}".strip(", ")
+                    item = res.json()[0]
+                    lat = float(item.get("lat"))
+                    lon = float(item.get("lon"))
+                    parts = [p.strip() for p in (item.get("display_name") or query).split(",") if p.strip()]
+                    loc_name = ", ".join(parts[:3]) if parts else query
                     return lat, lon, loc_name
         except Exception as e:
-            logger.warning(f"Geocoding error for '{query}': {e}")
+            logger.warning(f"Nominatim geocoding error for '{query}': {e}")
         return None
 
     @classmethod
@@ -69,10 +137,9 @@ class WeatherService:
 
         # 1. If explicit search query provided (e.g. "Bengaluru" or "Mandya")
         if location_query and location_query.strip():
-            if api_key:
-                geo = await cls._geocode_query(location_query.strip(), api_key)
-                if geo:
-                    latitude, longitude, location_name = geo
+            geo = await cls._geocode_query(location_query.strip(), api_key)
+            if geo:
+                latitude, longitude, location_name = geo
 
         # 2. If coordinates not provided or at dummy default, auto-detect from user's IP
         is_default_coords = (
@@ -89,6 +156,12 @@ class WeatherService:
             latitude = 12.9753
             longitude = 77.5910
             location_name = location_name or "Bengaluru, Karnataka"
+
+        # Resolve exact local village/town/district when location_name is missing or generic
+        if cls._is_generic_location(location_name):
+            nom_loc = await cls._reverse_geocode_nominatim(latitude, longitude)
+            if nom_loc:
+                location_name = nom_loc
 
         location_name = location_name or "Local Farm"
 
@@ -135,20 +208,22 @@ class WeatherService:
             )
             fore_data = fore_res.json() if fore_res.status_code == 200 else {}
 
-            # 3. Reverse Geocode for accurate village / city name
+            # 3. Preserve explicit non-generic location_name (or Nominatim-resolved locality);
+            #    only fall back to OpenWeather reverse geocode if still generic.
             resolved_location = location_name
-            try:
-                geo_res = await client.get(
-                    cls.OPENWEATHER_GEO_URL,
-                    params={"lat": lat, "lon": lng, "limit": 1, "appid": api_key}
-                )
-                if geo_res.status_code == 200 and len(geo_res.json()) > 0:
-                    g = geo_res.json()[0]
-                    resolved_location = f"{g.get('name', '')}, {g.get('state', g.get('country', ''))}".strip(', ')
-                elif curr_data.get("name"):
-                    resolved_location = f"{curr_data.get('name')}, {curr_data.get('sys', {}).get('country', '')}".strip(', ')
-            except Exception:
-                pass
+            if cls._is_generic_location(resolved_location):
+                try:
+                    geo_res = await client.get(
+                        cls.OPENWEATHER_GEO_URL,
+                        params={"lat": lat, "lon": lng, "limit": 1, "appid": api_key}
+                    )
+                    if geo_res.status_code == 200 and len(geo_res.json()) > 0:
+                        g = geo_res.json()[0]
+                        resolved_location = f"{g.get('name', '')}, {g.get('state', g.get('country', ''))}".strip(', ')
+                    elif curr_data.get("name"):
+                        resolved_location = f"{curr_data.get('name')}, {curr_data.get('sys', {}).get('country', '')}".strip(', ')
+                except Exception:
+                    pass
 
             return cls._parse_openweathermap_response(curr_data, fore_data, lat, lng, resolved_location)
 
